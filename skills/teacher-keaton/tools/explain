@@ -1,0 +1,123 @@
+#!/usr/bin/env bun
+
+// 全部入り解説書ツール: 一つのシステムを「用語表・概念マップ・振る舞いの図」として
+// 一つのMarkdownにまとめて出力する。学習(オンボーディング)と分析の両方に使う。
+//
+//   tools/explain <specパス> [--test <テスト名>] [--seed <値>] [--max-steps <n>]
+//
+// 4つのビューはすべてCUEの語彙とQuintの振る舞いから派生するため、用語と構造の
+// 整合性が構造的に保証される。ビューごとに適用可否を検出し、该系统統に合うものだけ出す:
+//   - 用語表       : CUEの glossary があれば
+//   - 概念マップ   : CUEの relations があれば
+//   - シーケンス図 : projection.cue に message イベントがあれば
+//   - 状態遷移図   : projection.cue に transition イベントがあれば
+
+import { cleanupTrace, cueExport, generateTrace } from "./lib/quint";
+import { detectEvents, type ProjectionSpec, type Trace } from "./lib/projection";
+import { makeLabelResolver, render } from "./lib/render";
+import { renderGlossary, type Glossary } from "./lib/glossary";
+import { generate as generateConceptMap, type Input as ConceptMapInput } from "./diagram-gen-bun/index";
+import { basename, dirname, resolve } from "node:path";
+
+type Options = {
+  specPath: string;
+  testName?: string;
+  seed?: string;
+  maxSteps: number;
+};
+
+function usage(): void {
+  console.error("使い方: tools/explain <specパス> [--test <テスト名>] [--seed <値>] [--max-steps <n>]");
+}
+
+function parseArguments(argv: string[]): Options | undefined {
+  if (argv.length === 0) return undefined;
+  const options: Options = { specPath: argv[0], maxSteps: 12 };
+  for (let index = 1; index < argv.length; index += 1) {
+    const argument = argv[index];
+    const next = argv[index + 1];
+    switch (argument) {
+      case "--test":
+        if (next === undefined) return undefined;
+        options.testName = next;
+        index += 1;
+        break;
+      case "--seed":
+        if (next === undefined) return undefined;
+        options.seed = next;
+        index += 1;
+        break;
+      case "--max-steps":
+        if (next === undefined) return undefined;
+        options.maxSteps = Number(next);
+        index += 1;
+        break;
+      default:
+        return undefined;
+    }
+  }
+  return options;
+}
+
+const options = parseArguments(Bun.argv.slice(2));
+if (options === undefined) {
+  usage();
+  process.exit(1);
+}
+
+const resolvedSpecPath = resolve(options.specPath);
+const appName = basename(dirname(resolvedSpecPath));
+
+// CUEから4ビューの元データを読む。
+const glossary = await cueExport<Glossary>(resolvedSpecPath, "glossary");
+const relations = await cueExport<ConceptMapInput["relations"]>(resolvedSpecPath, "relations");
+const vocabulary = await cueExport<ConceptMapInput["vocabulary"]>(resolvedSpecPath, "vocabulary");
+const projection = await cueExport<ProjectionSpec>(resolvedSpecPath, "projection");
+
+// 適用できるビューを検出する。
+const hasGlossary = Object.keys(glossary).length > 0;
+const hasConceptMap = relations.length > 0;
+const hasSequence = projection.events.some((event) => event.message !== undefined);
+const hasState = projection.events.some((event) => event.transition !== undefined);
+const needsTrace = hasSequence || hasState;
+
+// 振る舞いのビューがあればトレースを1本取得して共用する。
+let trace: Trace | undefined;
+let temporaryDirectory: string | undefined;
+if (needsTrace) {
+  const source = options.testName === undefined
+    ? { mode: "run" as const, seed: options.seed, maxSteps: options.maxSteps }
+    : { mode: "test" as const, testName: options.testName };
+  const generated = await generateTrace(resolvedSpecPath, source);
+  trace = await Bun.file(generated.path).json() as Trace;
+  temporaryDirectory = generated.directory;
+}
+
+const resolveLabel = makeLabelResolver(vocabulary);
+const fence = (diagram: string) => "```mermaid\n" + diagram + "```";
+
+const sections: string[] = [`# ${appName} 解説書`];
+
+if (hasGlossary) {
+  sections.push("## 用語表", renderGlossary(glossary));
+}
+
+if (hasConceptMap) {
+  sections.push("## 概念マップ", fence(generateConceptMap({ vocabulary, relations })));
+}
+
+if (hasSequence && trace !== undefined) {
+  const steps = detectEvents(trace, projection);
+  sections.push("## シーケンス図", fence(render("sequenceDiagram", steps, resolveLabel)));
+}
+
+if (hasState && trace !== undefined) {
+  const steps = detectEvents(trace, projection);
+  sections.push("## 状態遷移図", fence(render("stateDiagram", steps, resolveLabel)));
+}
+
+process.stdout.write(sections.join("\n") + "\n");
+
+if (temporaryDirectory !== undefined) {
+  await cleanupTrace(temporaryDirectory);
+}

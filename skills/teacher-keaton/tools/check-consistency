@@ -1,0 +1,100 @@
+#!/usr/bin/env bun
+
+import { resolve, join } from "node:path";
+import { readdirSync, readFileSync, existsSync } from "node:fs";
+import {
+  fetchKnownIds,
+  generateConstants,
+  moduleNameFor,
+} from "./lib/quint-constants.ts";
+
+const specPath = process.argv[2];
+
+if (specPath === undefined) {
+  console.error("使い方: tools/check-consistency <specパス>");
+  console.error("例:   tools/check-consistency apps/momotaro/spec");
+  process.exit(1);
+}
+
+const resolved = resolve(specPath);
+const ids = fetchKnownIds(resolved);
+const knownIds = new Set(ids);
+
+const qntFiles = readdirSync(resolved).filter((f) => f.endsWith(".qnt"));
+if (qntFiles.length === 0) {
+  console.error(`error: ${resolved} に .qnt ファイルがありません`);
+  process.exit(1);
+}
+
+const errors: string[] = [];
+const usedIds = new Set<string>();
+const JAPANESE = /[\u3040-\u30ff\u3400-\u9fff]/;
+const LITERAL = /"([^"\\]|\\.)*"/g;
+const CONSTANT_DEF = /pure val (\w+): str = "((?:[^"\\]|\\.)*)"/g;
+
+// 1. constants.qnt から 識別子 → id の対応を読む
+const constantsPath = join(resolved, "constants.qnt");
+const nameToId = new Map<string, string>();
+if (existsSync(constantsPath)) {
+  for (const match of readFileSync(constantsPath, "utf-8").matchAll(CONSTANT_DEF)) {
+    nameToId.set(match[1], match[2]);
+  }
+}
+
+for (const file of qntFiles) {
+  const path = join(resolved, file);
+  const lines = readFileSync(path, "utf-8").split("\n");
+  const text = lines.map((line) => line.split("//")[0]).join("\n");
+
+  // 2. 文字列リテラルの検査: 日本語禁止・未知のid禁止(importパスは対象外)
+  lines.forEach((rawLine, index) => {
+    if (/^\s*import/.test(rawLine)) {
+      return;
+    }
+    const line = rawLine.split("//")[0];
+    for (const match of line.matchAll(LITERAL)) {
+      const literal = match[0];
+      const value = JSON.parse(literal) as string;
+      if (JAPANESE.test(value)) {
+        errors.push(`${file}:${index + 1}: 日本語リテラル ${literal} — 用語の原本はCUEのvocabularyです`);
+        continue;
+      }
+      if (file !== "constants.qnt" && !knownIds.has(value)) {
+        errors.push(`${file}:${index + 1}: 未知のid ${literal} — CUEのknownIdsに存在しません`);
+      }
+    }
+  });
+
+  // 3. 識別子経由の使用状況(生成された定数を参照しているか)
+  if (file !== "constants.qnt") {
+    for (const [name, id] of nameToId) {
+      if (new RegExp(`\\b${name}\\b`).test(text)) {
+        usedIds.add(id);
+      }
+    }
+  }
+}
+
+// 4. constants.qnt の鮮度: 再生成結果と一致しなければ失敗
+const expected = generateConstants(ids, moduleNameFor(resolved));
+if (!existsSync(constantsPath)) {
+  errors.push("constants.qnt が存在しません: tools/gen-quint-constants を実行してください");
+} else if (readFileSync(constantsPath, "utf-8") !== expected) {
+  errors.push("constants.qnt がCUEのknownIdsと一致しません: tools/gen-quint-constants で再生成してください");
+}
+
+// 5. 警告: CUEに宣言済みだがQuintで未使用の概念(モデルの穴)
+for (const id of ids) {
+  if (!usedIds.has(id)) {
+    console.error(`warning: ${id} はCUEに宣言されていますがQuintのモデルで使用されていません`);
+  }
+}
+
+if (errors.length > 0) {
+  for (const error of errors) {
+    console.error(`error: ${error}`);
+  }
+  process.exit(1);
+}
+
+console.log(`ok: ${ids.length} concepts, ${usedIds.size} used in Quint, ${qntFiles.length} files checked`);

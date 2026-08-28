@@ -1,0 +1,15 @@
+# Dependencies
+node_modules/
+
+# Generated artifacts
+*.log
+.tmp/
+tmp/
+
+# OS
+.DS_Store
+
+# Editors
+.idea/
+.vscode/
+*.swp

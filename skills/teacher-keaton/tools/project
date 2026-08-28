@@ -1,0 +1,118 @@
+#!/usr/bin/env bun
+
+// 汎用投影ツール: 宣言的な投影仕様とQuintのトレースから図を生成する。
+// 「状態差分をどう意味づけるか」というドメイン解釈は各アプリの projection.cue が持ち、
+// 本ツールはそれを評価する汎用の機械。特定アプリの固有名詞を一切含まない。
+//
+//   観測(ランダムトレース):  tools/project <spec>
+//   宣言(固定シナリオ):      tools/project <spec> --test <テスト名>
+//   任意トレース:            tools/project <spec> --trace <itfファイル>
+//   形式指定:                --format sequenceDiagram|stateDiagram|json
+//                            (省略時は仕様の format を使う)
+
+import { detectEvents, type ProjectionSpec, type Trace } from "./lib/projection";
+import { makeLabelResolver, render } from "./lib/render";
+import { cleanupTrace, cueExport, generateTrace } from "./lib/quint";
+import { resolve } from "node:path";
+
+type Options = {
+  specPath: string;
+  tracePath?: string;
+  testName?: string;
+  format?: string;
+  seed?: string;
+  maxSteps: number;
+};
+
+function usage(): void {
+  console.error("使い方:");
+  console.error("  tools/project <specパス> [--format <形式>] [--seed <値>] [--max-steps <n>]");
+  console.error("  tools/project <specパス> --test <テスト名>");
+  console.error("  tools/project <specパス> --trace <itfファイル>");
+  console.error("形式: sequenceDiagram | stateDiagram | json (省略時は仕様の format)");
+}
+
+function parseArguments(argv: string[]): Options | undefined {
+  if (argv.length === 0) return undefined;
+  const options: Options = { specPath: argv[0], maxSteps: 6 };
+  for (let index = 1; index < argv.length; index += 1) {
+    const argument = argv[index];
+    const next = argv[index + 1];
+    switch (argument) {
+      case "--trace":
+        if (next === undefined) return undefined;
+        options.tracePath = next;
+        index += 1;
+        break;
+      case "--test":
+        if (next === undefined) return undefined;
+        options.testName = next;
+        index += 1;
+        break;
+      case "--format":
+        if (next === undefined) return undefined;
+        options.format = next;
+        index += 1;
+        break;
+      case "--seed":
+        if (next === undefined) return undefined;
+        options.seed = next;
+        index += 1;
+        break;
+      case "--max-steps":
+        if (next === undefined) return undefined;
+        options.maxSteps = Number(next);
+        index += 1;
+        break;
+      default:
+        return undefined;
+    }
+  }
+  return options;
+}
+
+const options = parseArguments(Bun.argv.slice(2));
+if (options === undefined) {
+  usage();
+  process.exit(1);
+}
+
+const resolvedSpecPath = resolve(options.specPath);
+
+const spec = await cueExport<ProjectionSpec>(resolvedSpecPath, "projection");
+const vocabulary = await cueExport<Record<string, { id: string; kind: string }>>(
+  resolvedSpecPath,
+  "vocabulary",
+);
+
+let tracePath: string;
+let temporaryDirectory: string | undefined;
+if (options.tracePath !== undefined) {
+  tracePath = resolve(options.tracePath);
+} else {
+  const trace = options.testName === undefined
+    ? await generateTrace(resolvedSpecPath, {
+      mode: "run",
+      seed: options.seed,
+      maxSteps: options.maxSteps,
+    })
+    : await generateTrace(resolvedSpecPath, { mode: "test", testName: options.testName });
+  tracePath = trace.path;
+  temporaryDirectory = trace.directory;
+}
+
+const trace = await Bun.file(tracePath).json() as Trace;
+
+const format = options.format ?? spec.format;
+if (format === undefined) {
+  console.error("error: 形式が未指定です。--format を渡すか仕様に format を書いてください");
+  process.exit(1);
+}
+
+const steps = detectEvents(trace, spec);
+const resolveLabel = makeLabelResolver(vocabulary);
+process.stdout.write(render(format, steps, resolveLabel));
+
+if (temporaryDirectory !== undefined) {
+  await cleanupTrace(temporaryDirectory);
+}

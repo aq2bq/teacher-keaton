@@ -1,0 +1,33 @@
+#!/usr/bin/env bun
+
+import { generate, type Input } from "./diagram-gen-bun/index.ts";
+import { resolve } from "node:path";
+
+const specPath = Bun.argv[2];
+
+if (specPath === undefined) {
+  console.error("使い方: tools/gen-mermaid-diagram <specパス>");
+  process.exit(1);
+}
+
+const resolvedSpecPath = resolve(specPath);
+
+async function cueExport<T>(expression: "vocabulary" | "relations"): Promise<T> {
+  const child = Bun.spawn(["cue", "export", resolvedSpecPath, "-e", expression], {
+    stdout: "pipe",
+    stderr: "inherit",
+  });
+  const output = await new Response(child.stdout).text();
+  const exitCode = await child.exited;
+
+  if (exitCode !== 0) {
+    process.exit(exitCode);
+  }
+
+  return JSON.parse(output) as T;
+}
+
+const vocabulary = await cueExport<Input["vocabulary"]>("vocabulary");
+const relations = await cueExport<Input["relations"]>("relations");
+
+process.stdout.write(generate({ vocabulary, relations }));
