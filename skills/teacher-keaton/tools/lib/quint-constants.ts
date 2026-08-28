@@ -1,12 +1,15 @@
 import { spawnSync } from "node:child_process";
+import { resolve } from "node:path";
 
 export type KnownIdInfo = {
   ids: string[];
   moduleName: string;
 };
 
+// cwd非依存にするため、specディレクトリをcwdにして "." を渡す。
 export function fetchKnownIds(specPath: string): string[] {
-  const result = spawnSync("cue", ["export", specPath, "-e", "knownIds"], {
+  const result = spawnSync("cue", ["export", ".", "-e", "knownIds"], {
+    cwd: resolve(specPath),
     encoding: "utf-8",
   });
   if (result.status !== 0) {

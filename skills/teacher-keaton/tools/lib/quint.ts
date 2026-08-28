@@ -46,8 +46,11 @@ export async function findQuintInput(specPath: string): Promise<string> {
 }
 
 // cue export -e <expression> の結果をJSONとして読む。
+// CUEはcwdからの相対パスの取り方次第で「non-canonical import path」を
+// 起こすため、specディレクトリをcwdにして "." を渡す(cwd非依存にする)。
 export async function cueExport<T>(specPath: string, expression: string): Promise<T> {
-  const child = Bun.spawn(["cue", "export", resolve(specPath), "-e", expression], {
+  const child = Bun.spawn(["cue", "export", ".", "-e", expression], {
+    cwd: resolve(specPath),
     stdout: "pipe",
     stderr: "inherit",
   });
