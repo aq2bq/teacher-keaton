@@ -1,19 +1,25 @@
 # 規約: specの構造と書き方
 
-`spec/` ディレクトリの標準的な構成と、各ファイルの書き方を定める。
+形式モデルは対象プロジェクトの **`keaton/spec/`** に置く(既定の出力先)。
+Rubyの `spec/`(RSpec)など各言語の慣習と衝突しないよう、専用の `keaton/`
+名前空間を使う。ツールは `<specパス>` を省略すると `keaton/spec` を使う。
 `examples/` に実例、`templates/` に雛形がある。
 
-## spec/ の構成
+## keaton/spec/ の構成
 
 ```
-spec/
-├── schema.cue        エンティティのスキーマ・enum・構造制約
-├── <domain>.cue      ドメインの概念(状態やキャラクター等)。id/preferredName/definition/relations
-├── vocabulary.cue    vocabulary / glossary / knownIds / relations / 参照整合性検査
-├── projection.cue    投影仕様(状態差分の意味づけ)
-├── <name>.qnt        Quint の振る舞いモデル
-└── constants.qnt     CUEのknownIdsから生成されたQuint定数(手編集禁止)
+<プロジェクト>/
+└── keaton/
+    └── spec/
+        ├── schema.cue        エンティティのスキーマ・enum・構造制約
+        ├── <domain>.cue      ドメインの概念(状態やキャラクター等)。id/preferredName/definition/relations
+        ├── vocabulary.cue    vocabulary / glossary / knownIds / relations / 参照整合性検査
+        ├── projection.cue    投影仕様(状態差分の意味づけ)
+        ├── <name>.qnt        Quint の振る舞いモデル
+        └── constants.qnt     CUEのknownIdsから生成されたQuint定数(手編集禁止)
 ```
+
+`keaton/` をルートにするのは、将来spec以外の成果物を置く余地を残すため。
 
 ## 安定識別子(stable id)
 
@@ -57,6 +63,20 @@ relations: [ ... ]
 - 状態・遷移・不変条件を書く。文字列リテラルは使わず定数を参照する。
 - `run` で書くシナリオテストは、名前を `Test` で終わらせる
   (`quint test` は `Test` 结尾の `run` だけ実行する)。
+
+### 定数モジュール名の決まり方
+
+`gen-quint-constants` が生成する `constants.qnt` のモジュール名は、specディレクトリの
+位置から決まる。`<name>.qnt` の `import` と一致させる必要がある。
+
+| specの場所 | モジュール名 |
+|---|---|
+| `<project>/keaton/spec`(既定) | `<Project>Constants`(プロジェクト名。例: `MyappConstants`) |
+| `apps/momotaro/spec` | `MomotaroConstants`(アプリ名) |
+| `apps/todo-cli/spec` | `TodoCliConstants`(ハイフンはcamelCase化) |
+
+既定の `keaton/spec` では直親が `keaton` なので、その一つ上のプロジェクト名を使う。
+生成後に `constants.qnt` の `module` 行を確認し、`<name>.qnt` の `import` と揃えること。
 
 ## projection.cue の書き方(核心)
 

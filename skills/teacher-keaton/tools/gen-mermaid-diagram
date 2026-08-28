@@ -2,15 +2,9 @@
 
 import { generate, type Input } from "./diagram-gen-bun/index.ts";
 import { resolve } from "node:path";
+import { resolveSpecPath } from "./lib/quint";
 
-const specPath = Bun.argv[2];
-
-if (specPath === undefined) {
-  console.error("使い方: tools/gen-mermaid-diagram <specパス>");
-  process.exit(1);
-}
-
-const resolvedSpecPath = resolve(specPath);
+const resolvedSpecPath = resolve(resolveSpecPath(Bun.argv[2]));
 
 async function cueExport<T>(expression: "vocabulary" | "relations"): Promise<T> {
   const child = Bun.spawn(["cue", "export", resolvedSpecPath, "-e", expression], {

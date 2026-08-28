@@ -58,6 +58,15 @@ bun <skill-dir>/tools/<tool> <specパス> [オプション]
 ```
 
 `<specパス>` は、一つのシステムのCUE(`*.cue`)とQuint(`*.qnt`)を含むディレクトリ。
+**既定は `keaton/spec`**(カレントディレクトリ基準)。Rubyの `spec/`(RSpec)など
+各言語の慣習と衝突しないよう、専用の `keaton/` 名前空間を使う。ツールは
+`<specパス>` を省略すると `keaton/spec` を使い、明示すればそちらを優先する。
+
+```sh
+bun <skill-dir>/tools/explain                    # 既定の keaton/spec を使う
+bun <skill-dir>/tools/explain path/to/spec       # 明示的に指定
+```
+
 ソースリポジトリの `examples/` に2つの完成例がある
 (`momotaro`=ナラティブ、`todo-cli`=状態機械)。
 
@@ -91,7 +100,7 @@ CUEのid/名を参照し、独自に作り出さない。
 
 ### 2. CUEで構造を書く
 
-`spec/` ディレクトリを作る。定義するもの:
+対象プロジェクトの `keaton/spec/` ディレクトリを作る(既定の出力先)。定義するもの:
 - `schema.cue`: エンティティのスキーマ・enum・構造制約
   (必須フィールド・型・値の範囲)。コードが読込時に行う検証を写し取る
 - ドメインファイル(例: `statuses.cue`): 各概念に `id`, `preferredName`,

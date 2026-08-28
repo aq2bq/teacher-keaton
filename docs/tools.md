@@ -1,7 +1,8 @@
 # ツールリファレンス
 
 `skills/teacher-keaton/tools/` にあるツールの一覧。すべて `<specパス>` を先頭引数に取る。
-Bunで実行する: `bun <skill-dir>/tools/<tool> <specパス> [オプション]`。
+**`<specパス>` を省略すると既定の `keaton/spec`** を使い、明示すればそちらを優先する。
+Bunで実行する: `bun <skill-dir>/tools/<tool> [<specパス>] [オプション]`。
 
 共通の前提: `<specパス>` はCUE(`*.cue`)とQuint(`*.qnt`)を含むディレクトリ。
 ツールは `constants.qnt` 以外の単一の `.qnt` をモデルとして自動特定する。

@@ -3,8 +3,31 @@
 // これらはCLI向けの薄いラッパであり、失敗時はstderrへ書いて終了する。
 
 import { mkdtemp, readdir, rm } from "node:fs/promises";
+import { existsSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+
+// 既定の spec 出力先。Ruby の spec/(RSpec)など各言語の慣習と衝突しないよう、
+// 専用の keaton/ 名前空間を使う。ユーザーが明示的に指定すればそちらを優先する。
+export const DEFAULT_SPEC_PATH = "keaton/spec";
+
+// <specパス> 引数を解決する。未指定なら DEFAULT_SPEC_PATH を使う。
+// 存在しなければ明確なエラーで終了する。
+// CUE はシンボリックリンク未解決のパスを拒むため、realpath で正規化する。
+export function resolveSpecPath(arg: string | undefined): string {
+  const raw = arg ?? DEFAULT_SPEC_PATH;
+  const resolved = resolve(raw);
+  if (!existsSync(resolved)) {
+    console.error(`error: specディレクトリが見つかりません: ${raw}`);
+    if (arg === undefined) {
+      console.error(
+        `(既定は ${DEFAULT_SPEC_PATH}。パスを明示的に渡すか、先にディレクトリを作成してください)`,
+      );
+    }
+    process.exit(1);
+  }
+  return realpathSync(resolved);
+}
 
 // モデルの .qnt を特定する。ディレクトリ名と同名とは限らないため、
 // constants.qnt(生成物)を除いた単一の .qnt を探す。

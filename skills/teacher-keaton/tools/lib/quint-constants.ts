@@ -16,9 +16,16 @@ export function fetchKnownIds(specPath: string): string[] {
 }
 
 export function moduleNameFor(specPath: string): string {
-  const base = specPath.split("/").filter(Boolean).pop() ?? "spec";
-  const appDir = base === "spec" ? specPath.split("/").slice(-2, -1)[0] : base;
-  return `${toIdentifier(appDir)}Constants`;
+  const segments = specPath.split("/").filter(Boolean);
+  const base = segments.pop() ?? "spec";
+  // spec ディレクトリの直親をアプリ名とみなす。
+  let appDir = base === "spec" ? segments[segments.length - 1] : base;
+  // 既定の <project>/keaton/spec のように直親が keaton なら、
+  // その一つ上(プロジェクト名)を使う。
+  if (appDir === "keaton") {
+    appDir = segments[segments.length - 2] ?? appDir;
+  }
+  return `${toIdentifier(appDir ?? "spec")}Constants`;
 }
 
 // アプリディレクトリ名から有効なQuint識別子を作る。

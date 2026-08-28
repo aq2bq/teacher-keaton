@@ -12,7 +12,7 @@
 //   - シーケンス図 : projection.cue に message イベントがあれば
 //   - 状態遷移図   : projection.cue に transition イベントがあれば
 
-import { cleanupTrace, cueExport, generateTrace } from "./lib/quint";
+import { cleanupTrace, cueExport, generateTrace, resolveSpecPath } from "./lib/quint";
 import { detectEvents, type ProjectionSpec, type Trace } from "./lib/projection";
 import { makeLabelResolver, render } from "./lib/render";
 import { renderGlossary, type Glossary } from "./lib/glossary";
@@ -27,13 +27,19 @@ type Options = {
 };
 
 function usage(): void {
-  console.error("使い方: tools/explain <specパス> [--test <テスト名>] [--seed <値>] [--max-steps <n>]");
+  console.error("使い方: tools/explain [<specパス>] [--test <テスト名>] [--seed <値>] [--max-steps <n>]");
+  console.error("specパス省略時は keaton/spec を使います。");
 }
 
 function parseArguments(argv: string[]): Options | undefined {
-  if (argv.length === 0) return undefined;
-  const options: Options = { specPath: argv[0], maxSteps: 12 };
-  for (let index = 1; index < argv.length; index += 1) {
+  let index = 0;
+  let specArg: string | undefined;
+  if (argv.length > 0 && !argv[0].startsWith("--")) {
+    specArg = argv[0];
+    index = 1;
+  }
+  const options: Options = { specPath: resolveSpecPath(specArg), maxSteps: 12 };
+  for (; index < argv.length; index += 1) {
     const argument = argv[index];
     const next = argv[index + 1];
     switch (argument) {
@@ -66,7 +72,12 @@ if (options === undefined) {
 }
 
 const resolvedSpecPath = resolve(options.specPath);
-const appName = basename(dirname(resolvedSpecPath));
+// 解説書の題名はプロジェクト名から取る。既定の <project>/keaton/spec のように
+// 直上が keaton なら、その一つ上をプロジェクト名とする。
+let appName = basename(dirname(resolvedSpecPath));
+if (appName === "keaton") {
+  appName = basename(dirname(dirname(resolvedSpecPath)));
+}
 
 // CUEから4ビューの元データを読む。
 const glossary = await cueExport<Glossary>(resolvedSpecPath, "glossary");
