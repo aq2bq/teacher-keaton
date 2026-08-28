@@ -1,185 +1,185 @@
 ---
 name: teacher-keaton
-description: "Reverse-engineer an existing codebase into a formal specification model (CUE for structure, Quint for behavior) and project it into consistent views — glossary, concept map, sequence/state diagrams — to build and reconcile a human's mental model of the system. Use when the user wants to understand, formalize, or document an existing system's structure and behavior, or asks to reverse-engineer code into a specification, or wants a 'mental model' / 'semantic' view of a codebase. Do not use for greenfield feature implementation or ordinary code edits."
+description: "既存のコードベースを形式仕様モデル(構造はCUE、振る舞いはQuint)へリバースエンジニアリングし、整合したビュー(用語表・概念マップ・シーケンス図/状態遷移図)へ投影して、システムのメンタルモデルの構築と照合を支援する。既存システムの構造・振る舞いの理解・形式化・文書化、コードの仕様へのリバースエンジニアリング、『メンタルモデル』『セマンティック』なビューの要求があった場合に使う。グリーンフィールドの新機能実装や通常のコード編集には使わない。 / Reverse-engineer an existing codebase into a formal specification model (CUE for structure, Quint for behavior) and project it into consistent views — glossary, concept map, sequence/state diagrams — to build and reconcile a human's mental model. Use when the user wants to understand, formalize, or document an existing system's structure and behavior, or asks to reverse-engineer code into a specification, or wants a 'mental model' / 'semantic' view of a codebase. Do not use for greenfield feature implementation or ordinary code edits."
 ---
 
 # Teacher Keaton
 
-Teacher Keaton turns an existing codebase into a **formal specification model** and then
-**projects** that model into consistent, human-readable views. The goal is not to generate
-code but to build and reconcile a **mental model** of what a system is and how it behaves.
+Teacher Keaton は、既存のコードベースを**形式仕様モデル**へ変換し、それを
+**整合した複数のビュー**へ投影する。目的はコード生成ではなく、システムが何であり
+どう振る舞うかの**メンタルモデルを構築し、照合する**ことである。
 
-The method is **semantic reverse engineering**:
+手法は**セマンティック・リバースエンジニアリング**:
 
 ```
-real code (source of truth)
-   |  reverse-engineer
+実コード(事実源)
+   |  リバースエンジニアリング
    v
-formal model (Specification IR)
-   |-- CUE   : structure, vocabulary, relations  (static)
-   |-- Quint : states, transitions, invariants   (behavior)
-   |  project
+形式モデル(Specification IR)
+   |-- CUE   : 構造・語彙・関係   (静的)
+   |-- Quint : 状態・遷移・不変条件(振る舞い)
+   |  投影
    v
-views: glossary / concept map / sequence diagram / state diagram
-   |  reconcile
+ビュー: 用語表 / 概念マップ / シーケンス図 / 状態遷移図
+   |  照合
    v
-human mental model  <-- compare, find gaps, refine the model, re-project
+人間のメンタルモデル  ← 突き合わせ、食い違いを見つけ、モデルを直して再投影
 ```
 
-All views derive from the same CUE vocabulary and Quint behavior, so terminology and
-structure stay consistent across every view by construction.
+すべてのビューは同じCUE語彙とQuint振る舞いから派生するため、
+用語と構造は**構造的に**どのビュー間でも一致する。
 
-## When to use
+## 使う場面
 
-Use this skill when the user wants to:
-- Understand or explain an existing system they did not write (or wrote long ago).
-- Formalize a system's structure and behavior into a checkable specification.
-- Produce a glossary, concept map, or behavior diagrams that stay consistent with a model.
-- Onboard onto a codebase by building a mental model of it.
+次をしたいときに使う:
+- 自分が書いていない(昔書いた)既存システムを理解・説明したい
+- システムの構造と振る舞いを、検査可能な仕様へ形式化したい
+- モデルと整合した用語表・概念マップ・振る舞い図を作りたい
+- コードベースのメンタルモデルを築いてオンボーディングしたい
 
-Do **not** use it for greenfield feature work, refactors, or ordinary code edits.
+**使わない**場面: グリーンフィールドの新機能開発、リファクタ、通常のコード編集。
 
-## Prerequisites
+## 前提
 
-The tools require three CLIs on `PATH`. Check first and tell the user what is missing:
+ツールは3つのCLIが `PATH` に必要。まず確認し、無ければユーザーに導入を促す:
 
 ```sh
-cue --version     # CUE   (structural validation)   https://cuelang.org
-quint --version   # Quint (behavioral validation)   https://quint-lang.org
-bun --version     # Bun   (runs the tools)          https://bun.sh
+cue --version     # CUE   (構造検証)   https://cuelang.org
+quint --version   # Quint (振る舞い検証) https://quint-lang.org
+bun --version     # Bun   (ツール実行)  https://bun.sh
 ```
 
-If any is missing, stop and ask the user to install it (e.g. `brew install cue quint bun`).
+どれかが無ければ止め、導入を依頼する(例: `brew install cue quint bun`)。
 
-The tools live in this skill's `tools/` directory. Invoke them with `bun`:
+ツールはこのスキルの `tools/` ディレクトリにある。Bunで実行する:
 
 ```sh
-bun <skill-dir>/tools/<tool> <spec-path> [options]
+bun <skill-dir>/tools/<tool> <specパス> [オプション]
 ```
 
-A `<spec-path>` is a directory containing the CUE (`*.cue`) and Quint (`*.qnt`) files of one
-system. See `examples/` in the source repository for two complete worked examples
-(`momotaro` = narrative, `todo-cli` = state machine).
+`<specパス>` は、一つのシステムのCUE(`*.cue`)とQuint(`*.qnt`)を含むディレクトリ。
+ソースリポジトリの `examples/` に2つの完成例がある
+(`momotaro`=ナラティブ、`todo-cli`=状態機械)。
 
-## The two layers
+## 2つの層
 
-| Layer | Tool | Question it answers | Files |
+| 層 | ツール | 答える問い | ファイル |
 |---|---|---|---|
-| Structure | CUE | "What exists and how is it connected?" | `schema.cue`, `vocabulary.cue`, `statuses.cue`, … |
-| Behavior | Quint | "What can happen, and what must always hold?" | `<name>.qnt` |
-| Projection | `projection.cue` | "How do state changes mean something?" | `projection.cue` |
+| 構造 | CUE | 何が存在し、どう繋がっているか | `schema.cue`, `vocabulary.cue`, `statuses.cue` 等 |
+| 振る舞い | Quint | 何が起きえて、何が常に成り立つか | `<name>.qnt` |
+| 投影 | `projection.cue` | 状態変化をどう意味づけるか | `projection.cue` |
 
-**CUE is the source of truth for vocabulary.** Every concept has a stable id and a
-display term; Quint and all diagrams reference CUE's ids/terms and never invent their own.
+**CUEが語彙の原本。** 各概念は安定idと表示名を持ち、Quintとすべての図は
+CUEのid/名を参照し、独自に作り出さない。
 
-## Workflow
+## ワークフロー
 
-Follow these phases in order. Keep the model **sound but not complete**: formalize only
-what is worth machine-checking. Leave rationale and fuzzy intent as prose.
+次のフェーズを順に進める。モデルは**健全だが完全ではない**を保つ:
+機械検査する価値のあるものだけ形式化し、根拠や曖昧な意図は散文のまま残す。
 
-### 1. Survey the code
+### 1. コードを調査する
 
-Read the codebase and identify, taking notes:
-- **Concepts/entities**: the nouns (e.g. Task, Character, Order). Their attributes.
-- **States**: discrete states an entity can be in (e.g. a task's `backlog/active/done`).
-- **Transitions**: operations that change state, and their **guards** (preconditions).
-- **Invariants**: what must always be true (e.g. ids never reused; `completedAt` only when done).
-- **Relations**: how concepts connect (e.g. "A is paid to B", "X starts Y").
+コードを読み、次を書き出しながら見立てる:
+- **概念/エンティティ**: 名詞(例: Task, Character, Order)とその属性
+- **状態**: エンティティが取りうる離散状態(例: タスクの `backlog/active/done`)
+- **遷移**: 状態を変える操作と、その**ガード**(前提条件)
+- **不変条件**: 常に成り立つべきこと(例: idは再利用しない; completedAtはdoneのみ)
+- **関係**: 概念同士の繋がり(例: 「AがBへ支払う」「XがYを開始する」)
 
-Distinguish **observable facts** (what the code provably does) from **assumed intent**
-(why it does it). Model the facts; mark intent as prose.
+**観測事実**(コードが現にやること)と**意図の推測**(なぜそうするか)を区別する。
+事実はモデルに書き、意図は散文として残す。
 
-### 2. Author the CUE structure
+### 2. CUEで構造を書く
 
-Create the `spec/` directory. Define:
-- `schema.cue`: the entity/record schemas, enums, and structural constraints
-  (required fields, types, value ranges). Mirror any validation the code does on load.
-- Domain files (e.g. `statuses.cue`): each concept with `id`, `preferredName`,
-  `definition`, and `relations`.
-- `vocabulary.cue`: the `vocabulary` (term→{id,kind}), `glossary` (term→{id,kind,definition}),
-  `knownIds`, `relations`, and referential-integrity checks. Use `templates/` as a starting point.
+`spec/` ディレクトリを作る。定義するもの:
+- `schema.cue`: エンティティのスキーマ・enum・構造制約
+  (必須フィールド・型・値の範囲)。コードが読込時に行う検証を写し取る
+- ドメインファイル(例: `statuses.cue`): 各概念に `id`, `preferredName`,
+  `definition`, `relations`
+- `vocabulary.cue`: `vocabulary`(用語→{id,種別})、`glossary`(用語→{id,種別,定義})、
+  `knownIds`、`relations`、参照整合性検査。`templates/` を出発点にする
 
-Validate: `cue vet -c <spec-path>`.
+検証: `cue vet -c <specパス>`。
 
-### 3. Author the Quint behavior
+### 3. Quintで振る舞いを書く
 
-- Write `<name>.qnt`: `var` state variables, `action init`, `action step`, one action per
-  transition (with guards), and `val` invariants. Add `run ...Test` scenarios.
-- Generate the constants that bind Quint to CUE's ids:
-  `bun <skill-dir>/tools/gen-quint-constants <spec-path>`. This writes `constants.qnt`.
-  In `<name>.qnt`, `import <Module>Constants.* from "./constants"` and use those constants —
-  never raw strings.
-- Validate:
+- `<name>.qnt` を書く: `var` 状態変数、`action init`、`action step`、
+  遷移ごとのアクション(ガード付き)、`val` 不変条件。`run ...Test` シナリオも追加
+- CUEのidに紐付ける定数を生成:
+  `bun <skill-dir>/tools/gen-quint-constants <specパス>`。`constants.qnt` が書かれる。
+  `<name>.qnt` では `import <Module>Constants.* from "./constants"` して
+  その定数を使い、**生文字列は使わない**
+- 検証:
   ```sh
-  quint typecheck <spec-path>/<name>.qnt
-  quint test      <spec-path>/<name>.qnt
-  quint verify    <spec-path>/<name>.qnt --invariant <A>,<B>,<C>   # list invariants explicitly
+  quint typecheck <specパス>/<name>.qnt
+  quint test      <specパス>/<name>.qnt
+  quint verify    <specパス>/<name>.qnt --invariant <A>,<B>,<C>   # 不変条件は明示列挙
   ```
 
-### 4. Author the projection
+### 4. 投影を書く
 
-Write `projection.cue`: declare, for each meaningful event, **which state change triggers it**
-and **how to render it** (a `message` between participants, or a `transition` between states).
-This file holds the domain interpretation that used to be hardcoded in tools. See
-`docs/conventions.md` and `examples/*/spec/projection.cue`.
+`projection.cue` を書く: 各意味のあるイベントについて、**どの状態変化がそれを
+引き起こすか**と**どう描画するか**(参加者間の `message` か、状態間の `transition` か)
+を宣言する。このファイルが、かつてツールにハードコードされていたドメイン解釈の
+置き場所である。`docs/conventions.md` と `examples/*/spec/projection.cue` を参照。
 
-### 5. Check consistency
-
-```sh
-bun <skill-dir>/tools/check-consistency <spec-path>
-```
-This verifies Quint string literals are known CUE ids, no Japanese/raw literals leak into
-`.qnt`, and `constants.qnt` is fresh.
-
-### 6. Project and reconcile
+### 5. 整合を検査する
 
 ```sh
-bun <skill-dir>/tools/explain <spec-path>            # all-in-one explainer (Markdown)
-bun <skill-dir>/tools/explain <spec-path> --test <testName>   # a specific scenario
+bun <skill-dir>/tools/check-consistency <specパス>
 ```
+Quintの文字列リテラルが既知のCUE idか、`.qnt` に日本語/生リテラルが漏れていないか、
+`constants.qnt` が新鮮かを検査する。
 
-Individual views:
+### 6. 投影して照合する
+
 ```sh
-bun <skill-dir>/tools/glossary            <spec-path>   # glossary (Markdown table)
-bun <skill-dir>/tools/gen-mermaid-diagram <spec-path>   # concept map (Mermaid graph)
-bun <skill-dir>/tools/project             <spec-path>   # behavior diagram (sequence/state/json)
+bun <skill-dir>/tools/explain <specパス>            # 全部入り解説書(Markdown)
+bun <skill-dir>/tools/explain <specパス> --test <テスト名>  # 特定シナリオ
 ```
 
-Then **reconcile**: show the views to the human and compare against their understanding and
-the real behavior. A mismatch is a finding — either the model is wrong (fix it) or the human's
-mental model was incomplete (the view taught them something). Iterate: refine the model,
-re-project, re-reconcile.
+個別のビュー:
+```sh
+bun <skill-dir>/tools/glossary            <specパス>   # 用語表(Markdown表)
+bun <skill-dir>/tools/gen-mermaid-diagram <specパス>   # 概念マップ(Mermaid graph)
+bun <skill-dir>/tools/project             <specパス>   # 振る舞い図(シーケンス/状態/json)
+```
 
-## Conventions (must follow)
+そして**照合する**: ビューを人間に示し、その理解や実際の挙動と突き合わせる。
+食い違いは発見である — モデルが間違っているか(直す)、人間のメンタルモデルが
+不完全だったか(ビューが何かを教えた)。**モデルを直して再投影し、繰り返す。**
 
-- **Stable identity**: every concept has an id that survives renaming. Prefix by kind
-  (`char-`, `item-`) or use the state name for statuses.
-- **CUE owns vocabulary**: display terms and definitions live in CUE. Quint and diagrams
-  resolve labels from CUE; they never hardcode names.
-- **No raw strings in Quint**: reference `constants.qnt`. `check-consistency` enforces this.
-- **Adaptive views**: output only the views that fit the system. A narrative suits a sequence
-  diagram; a state machine suits a state diagram. Never force all four.
-- **Projection is for reconciliation**, not decoration. Every view should be something a human
-  can compare against reality.
+## 規約(必ず守る)
 
-## Tool reference
+- **安定識別子**: 各概念に、改名しても変わらないid。種別接頭辞を付ける
+  (`char-`, `item-`)。状態は状態名をidにしてよい
+- **CUEが語彙の原本**: 表示名と定義はCUEに置く。Quintと図はCUEからラベルを
+  解決し、名前をハードコードしない
+- **Quintに生文字列を置かない**: `constants.qnt` を参照。`check-consistency` が強制
+- **適応型ビュー**: システムに合うビューだけ出す。ナラティブはシーケンス図、
+  状態機械は状態図。4つを強制しない
+- **投影は照合のため**であり装飾ではない。どのビューも人間が現実と
+  突き合わせられるものであること
 
-| Tool | Purpose |
+## ツールリファレンス
+
+| ツール | 役割 |
 |---|---|
-| `explain` | All-in-one explainer: glossary + concept map + behavior diagram in one Markdown |
-| `glossary` | Glossary (Markdown table) from CUE `glossary` |
-| `gen-mermaid-diagram` | Concept map (Mermaid `graph LR`) from CUE vocabulary + relations |
-| `project` | Behavior diagram from `projection.cue` + a Quint trace (`--format sequenceDiagram\|stateDiagram\|json`) |
-| `gen-quint-constants` | Generate `constants.qnt` from CUE `knownIds` |
-| `check-consistency` | Verify CUE↔Quint vocabulary consistency |
+| `explain` | 全部入り解説書: 用語表+概念マップ+振る舞い図を一つのMarkdownで |
+| `glossary` | CUEの `glossary` から用語表(Markdown表) |
+| `gen-mermaid-diagram` | CUEの語彙と関係から概念マップ(Mermaid `graph LR`) |
+| `project` | `projection.cue`+Quintトレースから振る舞い図(`--format sequenceDiagram\|stateDiagram\|json`) |
+| `gen-quint-constants` | CUEの `knownIds` から `constants.qnt` を生成 |
+| `check-consistency` | CUE↔Quintの語彙整合を検査 |
 
-## Gotchas
+## 注意点
 
-- `quint verify` checks **only deadlocks** unless you pass `--invariant A,B,C`. Always list
-  the invariants explicitly.
-- `quint test` runs only `run` definitions whose names end in `Test` (case-sensitive).
-- `gen-quint-constants` sanitizes hyphens in the module name (`todo-cli` → `TodoCliConstants`).
-- `project`/`explain` need a trace: they run `quint run` (observation) by default, or
-  `quint test --match <name>` with `--test`. Pass `--seed` for reproducibility.
-- The model is **sound but not complete**. Do not try to formalize everything; formalize what
-  is worth checking, and keep the rest as prose.
+- `quint verify` は `--invariant A,B,C` を渡さないと**deadlockしか検査しない**。
+  不変条件は必ず明示列挙する
+- `quint test` は名前が `Test` で終わる `run` 定義だけ実行する(大文字小文字を区別)
+- `gen-quint-constants` はモジュール名のハイフンをサニタイズする
+  (`todo-cli` → `TodoCliConstants`)
+- `project`/`explain` にはトレースが必要: 既定で `quint run`(観測)、
+  `--test` で `quint test --match <名前>`。再現性には `--seed`
+- モデルは**健全だが完全ではない**。すべてを形式化しようとせず、
+  検査する価値のあるものを形式化し、残りは散文で残す
