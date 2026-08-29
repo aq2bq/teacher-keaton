@@ -44,7 +44,7 @@ Teacher Keaton は、既存のコードベースを**形式仕様モデル**へ�
 ツールは3つのCLIが `PATH` に必要。まず確認し、無ければユーザーに導入を促す:
 
 ```sh
-cue --version     # CUE   (構造検証)   https://cuelang.org
+cue version       # CUE   (構造検証)   https://cuelang.org
 quint --version   # Quint (振る舞い検証) https://quint-lang.org
 bun --version     # Bun   (ツール実行)  https://bun.sh
 ```
