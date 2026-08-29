@@ -49,7 +49,16 @@ quint --version   # Quint (振る舞い検証) https://quint-lang.org
 bun --version     # Bun   (ツール実行)  https://bun.sh
 ```
 
-どれかが無ければ止め、導入を依頼する(例: `brew install cue quint bun`)。
+どれかが無ければ止め、導入を依頼する。macOSでは次を案内する:
+
+```sh
+brew install cue-lang/tap-cue
+brew install quint
+curl -fsSL https://bun.sh/install | bash
+```
+
+macOS以外では、CUE・Quint・Bunを `PATH` から利用できるよう、ユーザーが好む方法で
+セットアップするよう依頼する。
 
 ツールはこのスキルの `tools/` ディレクトリにある。Bunで実行する:
 

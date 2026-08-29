@@ -46,13 +46,23 @@ npx skills add ./teacher-keaton --skill teacher-keaton -g
 
 ### 前提
 
-スキルが使う3つのCLIが必要です。
+スキルが使う次の3つのCLIが必要です。
 
-| ツール | 役割 | 導入例 |
-|---|---|---|
-| [CUE](https://cuelang.org) | 構造検証 | `brew install cue` |
-| [Quint](https://quint-lang.org) | 振る舞い検証 | `brew install quint` |
-| [Bun](https://bun.sh) | ツール実行 | `brew install bun` |
+| ツール | 役割 |
+|---|---|
+| [CUE](https://cuelang.org) | 構造検証 |
+| [Quint](https://quint-lang.org) | 振る舞い検証 |
+| [Bun](https://bun.sh) | ツール実行 |
+
+macOSでは次のコマンドで導入できます。
+
+```sh
+brew install cue-lang/tap-cue
+brew install quint
+curl -fsSL https://bun.sh/install | bash
+```
+
+macOS以外では、お好みの方法で3つのCLIをセットアップしてください。
 
 ## クイックスタート
 
