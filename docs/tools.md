@@ -7,6 +7,22 @@ Bunで実行する: `bun <skill-dir>/tools/<tool> [<specパス>] [オプショ�
 共通の前提: `<specパス>` はCUE(`*.cue`)とQuint(`*.qnt`)を含むディレクトリ。
 ツールは `constants.qnt` 以外の単一の `.qnt` をモデルとして自動特定する。
 
+## vet — CUE構造検証 + 境界条件の用例ハーネス
+
+```sh
+bun tools/vet <spec>
+```
+
+1. `cue vet -c .` をspecディレクトリをcwdにして実行する
+   (CUE v0.17.1 では `cue vet -c <相対パス>`(`./` なし)がimport pathとして
+   扱われて失敗するため、必ずこのラッパー経由で行う)
+2. `positives/` の各用例をspecと合わせて検証し、**通過**することを確かめる
+   (制約が厳しすぎないか)
+3. `negatives/` の各用例をspecと合わせて検証し、**拒否**されることを確かめる
+   (制約が緩すぎないか)
+
+「正例N/N通過、負例N/N拒否」を報告し、期待と逆なら非ゼロ終了する。
+
 ## explain — 全部入り解説書
 
 用語表・概念マップ・振る舞いの図を一つのMarkdownにまとめて出力する。
@@ -24,6 +40,11 @@ bun tools/explain <spec> --max-steps <n>       # 探索ステップ数(既定12)
 `--all-tests` は `.qnt` の `run <名前>Test` をすべて列挙し、テストごとの図を
 `## 振る舞い` の下に `### <テスト名>` として束ねる。複数シナリオの成果物を
 一度に作る場合に使う(`--test` とは同時指定できない)。
+
+specに `about: {title, purpose, scope, exclusions}` があれば、題名と
+`## 概要`(目的・対象範囲・除外範囲)を出力する(無ければディレクトリ名が題名)。
+`tools/verify` が書き出した `verify-result.json` があれば、`## 検証` 節として
+不変条件名・成否・到達深度を取り込む。これで解説書が単体で完結する。
 
 ビューは**適応型**。CUEの `glossary`/`relations`、`projection.cue` の `message`/`transition`
 の有無で判定し、合うものだけ出す。
@@ -45,6 +66,11 @@ CUEの `vocabulary` と `relations` からMermaidの `graph LR`(概念マップ)
 ```sh
 bun tools/gen-mermaid-diagram <spec>
 ```
+
+ノードの選定: 関係を持つ概念と、投影も関係も参照しない孤立概念を描く。
+**投影が参照する孤立概念(イベント等)は除外する** — それらの意味は振る舞いの図が
+担うため、構造の図ではノイズになる。投影も関係も無い孤立概念は「関係の
+書き漏れ」のシグナルとして、あえて残す。
 
 ## project — 振る舞いの図
 
@@ -98,7 +124,7 @@ bun tools/check-consistency <spec>
 ## verify — 不変条件の全件検証
 
 ```sh
-bun tools/verify <spec> [--max-steps <n>]
+bun tools/verify <spec> [--depths 4,8,12] [--timeout <秒>] [--max-steps <n>]
 ```
 
 `quint verify` は `--invariant(s)` を渡さないとdeadlockしか検査しない。
@@ -107,7 +133,18 @@ bun tools/verify <spec> [--max-steps <n>]
 
 - 抽出規則: 頂層(2スペースインデント)の `val <Name>: bool`
   - 補助の補題は `def` / `pure def` で書く(抽出されない)
-- 報告: `定義N件 / 指定N件 / 検証成功N件`。失敗時は非ゼロ終了
+- **段階探索**: 深度4→8→12の順に試し、1段ごとに時間上限(既定60秒)。
+  検証コストは深度に対して掛け算で爆発しうるので、浅い深度から始めて
+  到達した深度を必ず報告する。反証が出たら即停止。浅い深度でのタイムアウトは
+  対象が拡散している徴候であり、スコープの絞り直しか抽象化の提案を利用者へ
+  返す引き金にする
+- **作業場の隔離**: Apalacheの `_apalache-out/` は `keaton/` の中
+  (keaton/ が無いspecでは spec の中)に作られる。検証成功時は削除し、
+  反証が見つかったときだけ保持して保存場所を報告する
+- 報告: `定義N件 / 指定N件 / 検証成功N件 (探索深度 N)`。失敗時は非ゼロ終了
+- 結果は `verify-result.json`(keaton/ の中、keaton/ が無いspecでは spec の中)
+  へ機械可読形式で書き出され、`explain` が「検証」節として取り込む
+- `--max-steps <n>` は段階探索をせず単一深度で検証する(従来互換)
 
 ## ライブラリ(`lib/`)
 

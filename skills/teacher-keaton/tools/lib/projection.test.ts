@@ -97,6 +97,53 @@ describe("detectEvents", () => {
     };
     expect(detectEvents(trace, spec).length).toBe(1);
   });
+
+  test("sequenceAppends で観測ログへの記録を検出し、値で絞り込める", () => {
+    const spec: ProjectionSpec = {
+      events: [
+        {
+          event: "event-reject-start-busy",
+          when: [
+            {
+              kind: "sequenceAppends",
+              var: "observedEvents",
+              value: "event-reject-start-busy",
+              bind: "ev",
+            },
+          ],
+          transition: { from: "active", to: "active" },
+        },
+      ],
+    };
+    // 記録が追加された遷移 → 発火
+    const fired: Trace = {
+      states: [
+        { observedEvents: [] },
+        { observedEvents: ["event-reject-start-busy"] },
+      ],
+    };
+    const steps = detectEvents(fired, spec);
+    expect(steps.length).toBe(1);
+    expect(steps[0][0].bindings.ev).toEqual(["event-reject-start-busy"]);
+
+    // 別の値の記録 → 絞り込みで発火しない
+    const other: Trace = {
+      states: [
+        { observedEvents: [] },
+        { observedEvents: ["event-other"] },
+      ],
+    };
+    expect(detectEvents(other, spec).length).toBe(0);
+
+    // 状態を変えない自己遷移でも、ログの変化だけで発火する
+    const selfLoop: Trace = {
+      states: [
+        { observedEvents: ["event-reject-start-busy"], activeTaskIds: set("1") },
+        { observedEvents: ["event-reject-start-busy", "event-reject-start-busy"], activeTaskIds: set("1") },
+      ],
+    };
+    expect(detectEvents(selfLoop, spec).length).toBe(1);
+  });
 });
 
 describe("validateProjectionVars", () => {

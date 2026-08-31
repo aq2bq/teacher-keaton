@@ -1,0 +1,104 @@
+#!/usr/bin/env bun
+
+// CUEの構造検証 + 境界条件の用例ハーネス。
+//
+//   1. spec本体の cue vet(構造の矛盾の検査)
+//   2. positives/ の各ファイル: 許可されるべき实例。specと合わせてvetが
+//      成功しなければならない(失敗するなら制約が厳しすぎる)
+//   3. negatives/ の各ファイル: 拒否されるべき实例。specと合わせてvetが
+//      失敗しなければならない(成功するなら制約が緩すぎる)
+//
+// cue vet は「書いた記述同士の矛盾」しか検出しないため、緩すぎる制約は
+// 負例をぶつけて初めて検査できる。このハーネスがそれを機械化する。
+//
+// 既知の限界(文書にも明記すること):
+// - 書かれた用例しか検査されない(網羅ではなく標本)
+// - 負例が「拒否された」とき、意図した制約で拒否されたか、負例ファイル自体の
+//   タイプミスで拒否されたかは区別できない
+//
+// CUE v0.17.1 では `cue vet -c <相対パス>`(./ なし)がimport pathとして
+// 扱われて失敗するため、必ず対象ディレクトリをcwdにして `cue vet -c .` を
+// 実行する(cwd非依存)。
+//
+//   tools/vet <specパス>
+
+import { mkdtempSync, readdirSync, copyFileSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { spawnSync } from "node:child_process";
+import { resolveSpecPath } from "./lib/quint";
+
+function vetDirectory(dir: string): { status: number; output: string } {
+  const result = spawnSync("cue", ["vet", "-c", "."], {
+    cwd: dir,
+    encoding: "utf-8",
+  });
+  return { status: result.status ?? 1, output: (result.stdout ?? "") + (result.stderr ?? "") };
+}
+
+const resolved = resolveSpecPath(Bun.argv[2]);
+
+// 1. spec本体の構造検証。
+const base = vetDirectory(resolved);
+if (base.status !== 0) {
+  process.stderr.write(base.output);
+  process.exit(base.status);
+}
+console.log("ok: 構造 (cue vet)");
+
+// specの頂上直下 *.cue と用例ファイルを一時ディレクトリで合わせてvetする。
+// サブディレクトリ(positives/ 等)は別パッケージなので通常検証を汚染しない。
+function vetCase(casePath: string): { status: number; output: string } {
+  const directory = mkdtempSync(join(tmpdir(), "keaton-vet-"));
+  try {
+    for (const file of readdirSync(resolved)) {
+      if (file.endsWith(".cue")) {
+        copyFileSync(join(resolved, file), join(directory, file));
+      }
+    }
+    copyFileSync(casePath, join(directory, "case.cue"));
+    return vetDirectory(directory);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+}
+
+let failed = false;
+
+function runCases(kind: "positives" | "negatives", expectPass: boolean): void {
+  let files: string[] = [];
+  try {
+    files = readdirSync(join(resolved, kind)).filter((f) => f.endsWith(".cue")).sort();
+  } catch {
+    return;
+  }
+  let ok = 0;
+  for (const file of files) {
+    const result = vetCase(join(resolved, kind, file));
+    const passed = expectPass ? result.status === 0 : result.status !== 0;
+    if (passed) {
+      ok += 1;
+    } else {
+      failed = true;
+      const verdict = expectPass
+        ? "正例が拒否されました(制約が厳しすぎる可能性があります)"
+        : "負例が拒否されませんでした(制約が緩すぎます)";
+      console.error(`error: ${kind}/${file}: ${verdict}`);
+      if (expectPass) {
+        process.stderr.write(result.output);
+      }
+    }
+  }
+  const label = expectPass ? "通過" : "拒否";
+  const summary = `${kind} ${ok}/${files.length} ${label}`;
+  if (ok === files.length) {
+    console.log(`ok: ${summary}`);
+  } else {
+    console.error(`ng: ${summary}`);
+  }
+}
+
+runCases("positives", true);
+runCases("negatives", false);
+
+process.exit(failed ? 1 : 0);

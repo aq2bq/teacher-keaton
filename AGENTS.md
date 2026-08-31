@@ -85,6 +85,8 @@
 | **図のラベルは語彙から解決する(イベントも概念)** | 図に出る語の自由記述を許すと、同じイベントがビューやセッションごとに別の言い方になり得て、認識のずれが生まれる。「図にはあるがモデルには無い語」というハルシネーションの露出面も消すため、ラベルはイベントのidから語彙の表示名へ解決し、`projection.cue` にラベルは書かない |
 | **形式化の範囲は `quintExpected` が正本** | 「健全だが完全ではない」が原則なので、全概念のQuint未使用を警告すると雑音になる(実適用で43中42件が警告)。行動の核だけ `vocabulary.cue` の `quintExpected` に宣言し、その未使用だけを「モデルの穴」として警告する |
 | **観測事実の根拠は概念の `sources` に残す** | 根拠のないモデルはハルシネーションと区別できない。特にコード以外(文書・表)を事実源にする適用で監査性を担保するため、`location` は自由形式(行番号に縛られない)で、用語表に根拠カラムとして出す |
+| **境界条件は正例・負例の両方で検証する** | `cue vet` は矛盾しか検出できず、緩すぎる制約(許可すべきでないものを許可する)は通してしまう。「モデルが実際には保証していないことを保証しているように見える」のを防ぐため、specの `positives/`・`negatives/` で「通るべきものが通り、拒むべきものが拒まれる」ことを `tools/vet` が機械的に検証する |
+| **`verify` は4→8→12の段階探索で到達深度を記録する** | 検証コストは深度に対して掛け算で爆発しうるため、深い深度の一発勝負は「長時間待って何も得られない」になり得る。浅い深度から始めて段ごとに時間上限を設ければ、どの時点で止まっても「どこまで保証できたか」が残る。浅い深度でのタイムアウトは、対象の拡散を知らせ、スコープ再合意か抽象化を提案する引き金になる |
 
 ---
 
@@ -147,12 +149,14 @@ teacher-keaton/
 # examples が正しく投影できるか(回帰)。ツールはcwd非依存・相対/絶対パスどちらでも可
 skills/teacher-keaton/tools/explain  examples/momotaro/spec  --test fullStoryTest
 skills/teacher-keaton/tools/explain  examples/todo-cli/spec  --test reopenTaskTest
+skills/teacher-keaton/tools/explain  examples/todo-cli/spec  --test busyStartRecordedTest
 skills/teacher-keaton/tools/check-consistency examples/todo-cli/spec
-skills/teacher-keaton/tools/verify   examples/momotaro/spec  # 不変条件の全件検証(約6秒)
+skills/teacher-keaton/tools/verify   examples/momotaro/spec  # 不変条件の全件検証(段階探索4→8→12、約20秒)
 ```
 
-`verify` を `examples/todo-cli` に対して行うと、タイムスタンプ文字列のSMT処理で
-数分以上かかるため、既定の回帰には含めない(必要なら `--max-steps` を絞る)。
+`verify` は深度4→8→12の段階探索で、1段あたり既定60秒。
+`examples/todo-cli` に対して行うと、タイムスタンプ文字列のSMT処理で
+浅い深度でも時間切れになるため、既定の回帰には含めない。
 
 前提: `cue` / `quint` / `bun` が `PATH` に必要(`brew install cue quint bun`)。
 `examples/` は「手本であり回帰テスト」なので、ツールや規約を変えたら必ず通すこと。

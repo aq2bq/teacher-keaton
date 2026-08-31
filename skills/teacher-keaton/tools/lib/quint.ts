@@ -63,6 +63,26 @@ export async function cueExport<T>(specPath: string, expression: string): Promis
   return JSON.parse(output) as T;
 }
 
+// 任意のフィールド向けの cue export。失敗しても終了せず undefined を返す
+// (about のように「あれば読む」フィールド用)。
+export async function tryCueExport<T>(specPath: string, expression: string): Promise<T | undefined> {
+  const child = Bun.spawn(["cue", "export", ".", "-e", expression], {
+    cwd: resolve(specPath),
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const output = await new Response(child.stdout).text();
+  const exitCode = await child.exited;
+  if (exitCode !== 0) {
+    return undefined;
+  }
+  try {
+    return JSON.parse(output) as T;
+  } catch {
+    return undefined;
+  }
+}
+
 async function runQuint(args: string[]): Promise<number> {
   const child = Bun.spawn(["quint", ...args], { stdout: "pipe", stderr: "pipe" });
   const [stdout, stderr, exitCode] = await Promise.all([

@@ -11,18 +11,31 @@ Rubyの `spec/`(RSpec)など各言語の慣習と衝突しないよう、専用�
 <プロジェクト>/
 └── keaton/
     ├── TODO.md               未解決の食い違いがある場合だけ作る根拠付き記録
+    ├── verify-result.json    tools/verify が書き出す検証結果(任意。explainが取り込む)
     └── spec/
         ├── schema.cue        エンティティのスキーマ・enum・構造制約
         ├── <domain>.cue      ドメインの概念(状態やキャラクター等)。id/preferredName/definition/relations
         ├── vocabulary.cue    vocabulary / glossary / knownIds / relations / 参照整合性検査
         ├── projection.cue    投影仕様(状態差分の意味づけ)
+        ├── about.cue         解説のメタデータ(題名・目的・範囲・除外範囲。任意)
         ├── <name>.qnt        Quint の振る舞いモデル
-        └── constants.qnt     CUEのknownIdsから生成されたQuint定数(手編集禁止)
+        ├── constants.qnt     CUEのknownIdsから生成されたQuint定数(手編集禁止)
+        ├── positives/        許可されるべき实例(境界条件ごとに最低1件)
+        └── negatives/        拒否されるべき实例(境界条件ごとに最低1件)
 ```
 
 `keaton/` をルートにするのは、将来spec以外の成果物を置く余地を残すため。
 `TODO.md` のパスは `<プロジェクト>/keaton/TODO.md` とする。
 明示した `<specパス>` を使う場合も、対象プロジェクトの `keaton/` へ置く。
+
+## 解説のメタデータ(about)
+
+`about.cue` に `about: {title, purpose, scope, exclusions}` を書くと、
+`explain` が題名と `## 概要` 節を出力し、解説書が単体で完結する。
+内容はフェーズ0で合意した**理解計画**と対応付ける(目的・範囲・深さの
+合意事項を、成果物側にも残す)。任意であり、無ければディレクトリ名が
+題名になる。`tools/verify` の結果は `keaton/verify-result.json` へ
+書き出され、`explain` が `## 検証` 節として取り込む。
 
 ## TODO.md の構造
 
@@ -50,6 +63,25 @@ Rubyの `spec/`(RSpec)など各言語の慣習と衝突しないよう、専用�
 各項目はレベル2見出し1つで表し、最終報告の未解決項目数はこの見出しを数える。
 同じ食い違いを再検出した場合は項目を増やさず、既存項目の根拠と影響を更新する。
 解決した項目は削除し、未解決項目が0件になったら `TODO.md` 自体を削除する。
+
+## 境界条件の用例(positives / negatives)
+
+`cue vet` は「書いた記述同士の矛盾」しか検出しない。**緩すぎる制約
+(許可してはいけないものを許可する)は矛盾ではない**ので、負例をぶつけて
+初めて検査できる。主要な境界条件ごとに用例を書く:
+
+- `positives/<名前>.cue` — 許可されるべき实例。specと合わせて `cue vet` が
+  成功しなければならない(失敗するなら制約が厳しすぎる)
+- `negatives/<名前>.cue` — 拒否されるべき实例。specと合わせて `cue vet` が
+  失敗しなければならない(成功するなら制約が緩すぎる)
+
+用例ファイルはspecと同じパッケージ名で書き、スキーマの定義を参照して
+(`bad: #Task & {...}` のように)違反を作る。`tools/vet` が両方向を機械的に
+検査し、「正例N/N通過、負例N/N拒否」を報告する。
+
+既知の限界: 検査されるのは書かれた用例だけ(網羅ではなく標本)。また
+負例が「拒否された」とき、意図した制約で拒否されたか、負例ファイル自体の
+タイプミスで拒否されたかは区別できない。
 
 ## 安定識別子(stable id)
 
@@ -161,6 +193,13 @@ projection: {
 | `intDecreases` | 整数が**減った** | — |
 | `intIncreases` | 整数が**増えた** | — |
 | `boolBecomes` | ブールが指定値に**変わった** | — |
+| `sequenceAppends` | リスト(観測ログ)に要素が**加わった** | 加わった要素 |
+
+`sequenceAppends` は `value` で特定のイベント定数に絞り込める。
+拒否・重複拒否のようにドメイン状態を変えない事象は、観測専用のリスト変数
+(例: `observedEvents: List[str]`)への記録としてモデル化し、この述語で投影する。
+`.fail()` で終わるテストは「不可能の証明」であり図には出ない — 図に出したい
+事象は記録方式で表す。観測専用変数はドメイン状態ではないので不変条件に使わない。
 
 `bind: "<name>"` で差分の値を捕まえ、`message`/`transition` の `from`/`to` で
 `"$<name>"` として参照する。リテラル(例: `"char-momo"`)もそのまま書ける。

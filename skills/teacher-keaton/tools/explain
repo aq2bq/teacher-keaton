@@ -16,12 +16,13 @@
 // --all-tests は .qnt の `run <名前>Test` をすべて列挙し、シナリオごとの図を
 // 一つのMarkdownに束ねる(成果物化には --output でファイルへ書く)。
 
-import { cleanupTrace, cueExport, findQuintInput, generateTrace, resolveSpecPath } from "./lib/quint";
-import { detectEvents, type ProjectionSpec, type Trace } from "./lib/projection";
+import { cleanupTrace, cueExport, findQuintInput, generateTrace, resolveSpecPath, tryCueExport } from "./lib/quint";
+import { detectEvents, projectionVocabRefs, type ProjectionSpec, type Trace } from "./lib/projection";
 import { makeLabelResolver, render } from "./lib/render";
 import { renderGlossary, type Glossary } from "./lib/glossary";
 import { generate as generateConceptMap, type Input as ConceptMapInput } from "./diagram-gen-bun/index";
-import { basename, dirname, resolve } from "node:path";
+import { basename, dirname, resolve, join } from "node:path";
+import { existsSync } from "node:fs";
 
 type Options = {
   specPath: string;
@@ -117,6 +118,33 @@ const relations = await cueExport<ConceptMapInput["relations"]>(resolvedSpecPath
 const vocabulary = await cueExport<ConceptMapInput["vocabulary"]>(resolvedSpecPath, "vocabulary");
 const projection = await cueExport<ProjectionSpec>(resolvedSpecPath, "projection");
 
+// 解説のメタデータ(任意)。題名・目的・対象範囲・除外範囲を書けば、
+// 解説書が単体で完結する。無ければディレクトリ名を題名にする。
+type About = { title?: string; purpose?: string; scope?: string; exclusions?: string[] };
+const about = await tryCueExport<About>(resolvedSpecPath, "about");
+
+// tools/verify が書き出した最新の検証結果(任意)。
+type VerifyFileResult = {
+  file: string;
+  invariants: string[];
+  outcome: "pass" | "violation" | "timeout" | "error";
+  depthReached?: number;
+};
+type VerifyResult = { verifiedAt: string; results: VerifyFileResult[] };
+function verifyResultPath(specPath: string): string {
+  const parent = dirname(specPath);
+  const base = basename(parent) === "keaton" ? parent : specPath;
+  return join(base, "verify-result.json");
+}
+let verifyResult: VerifyResult | undefined;
+if (existsSync(verifyResultPath(resolvedSpecPath))) {
+  try {
+    verifyResult = await Bun.file(verifyResultPath(resolvedSpecPath)).json() as VerifyResult;
+  } catch {
+    verifyResult = undefined;
+  }
+}
+
 // 適用できるビューを検出する。
 const hasGlossary = Object.keys(glossary).length > 0;
 const hasConceptMap = relations.length > 0;
@@ -127,14 +155,55 @@ const needsTrace = hasSequence || hasState;
 const resolveLabel = makeLabelResolver(vocabulary);
 const fence = (diagram: string) => "```mermaid\n" + diagram + "```";
 
-const sections: string[] = [`# ${appName} 解説書`];
+const sections: string[] = [`# ${about?.title ?? appName} 解説書`];
+
+if (about !== undefined && (about.purpose !== undefined || about.scope !== undefined || (about.exclusions ?? []).length > 0)) {
+  const overview: string[] = ["## 概要"];
+  if (about.purpose !== undefined) overview.push(`- 目的: ${about.purpose}`);
+  if (about.scope !== undefined) overview.push(`- 対象範囲: ${about.scope}`);
+  if ((about.exclusions ?? []).length > 0) {
+    overview.push("- 除外範囲:");
+    for (const exclusion of about.exclusions ?? []) {
+      overview.push(`  - ${exclusion}`);
+    }
+  }
+  sections.push(overview.join("\n"));
+}
+
+if (verifyResult !== undefined) {
+  const lines: string[] = [`## 検証 (${verifyResult.verifiedAt})`];
+  for (const result of verifyResult.results) {
+    const total = result.invariants.length;
+    switch (result.outcome) {
+      case "pass":
+        lines.push(
+          `- ${result.file}: 不変条件 ${total}/${total} 件検証済み` +
+            ` (探索深度 ${result.depthReached ?? "?"})`,
+        );
+        break;
+      case "violation":
+        lines.push(`- ${result.file}: 深度 ${result.depthReached ?? "?"} で不変条件の反証が見つかった`);
+        break;
+      default:
+        lines.push(
+          `- ${result.file}: 検証未完了 (${result.outcome})` +
+            (result.depthReached !== undefined ? ` — 深度 ${result.depthReached} までは検証済み` : ""),
+        );
+    }
+    lines.push(`  - 対象: ${result.invariants.join(", ")}`);
+  }
+  sections.push(lines.join("\n"));
+}
 
 if (hasGlossary) {
   sections.push("## 用語表", renderGlossary(glossary));
 }
 
 if (hasConceptMap) {
-  sections.push("## 概念マップ", fence(generateConceptMap({ vocabulary, relations })));
+  sections.push(
+    "## 概念マップ",
+    fence(generateConceptMap({ vocabulary, relations, projectionRefs: projectionVocabRefs(projection) })),
+  );
 }
 
 if (needsTrace && options.allTests) {

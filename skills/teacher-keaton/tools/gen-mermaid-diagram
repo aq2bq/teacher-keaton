@@ -1,12 +1,14 @@
 #!/usr/bin/env bun
 
 import { generate, type Input } from "./diagram-gen-bun/index.ts";
-import { resolve } from "node:path";
+import { resolve, join } from "node:path";
+import { existsSync } from "node:fs";
 import { resolveSpecPath } from "./lib/quint";
+import { projectionVocabRefs, type ProjectionSpec } from "./lib/projection.ts";
 
 const resolvedSpecPath = resolve(resolveSpecPath(Bun.argv[2]));
 
-async function cueExport<T>(expression: "vocabulary" | "relations"): Promise<T> {
+async function cueExport<T>(expression: "vocabulary" | "relations" | "projection"): Promise<T> {
   const child = Bun.spawn(["cue", "export", ".", "-e", expression], {
     cwd: resolvedSpecPath,
     stdout: "pipe",
@@ -25,4 +27,12 @@ async function cueExport<T>(expression: "vocabulary" | "relations"): Promise<T> 
 const vocabulary = await cueExport<Input["vocabulary"]>("vocabulary");
 const relations = await cueExport<Input["relations"]>("relations");
 
-process.stdout.write(generate({ vocabulary, relations }));
+// 投影が存在すれば、それが参照する概念を「振る舞いの図の担当」として
+// 概念マップから除外できるようにする。
+let projectionRefs: string[] = [];
+if (existsSync(join(resolvedSpecPath, "projection.cue"))) {
+  const projection = await cueExport<ProjectionSpec>("projection");
+  projectionRefs = projectionVocabRefs(projection);
+}
+
+process.stdout.write(generate({ vocabulary, relations, projectionRefs }));

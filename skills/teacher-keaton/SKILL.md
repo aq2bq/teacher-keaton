@@ -149,7 +149,10 @@ CUEのid/名を参照し、独自に作り出さない。
 
 対象プロジェクトの `keaton/spec/` ディレクトリを作る(既定の出力先)。定義するもの:
 - `schema.cue`: エンティティのスキーマ・enum・構造制約
-  (必須フィールド・型・値の範囲)。コードが読込時に行う検証を写し取る
+  (必須フィールド・型・値の範囲)。コードが読込時に行う検証を写し取る。
+  主要な境界条件ごとに、許可されるべき实例を `positives/`、拒否されるべき实例を
+  `negatives/` に最低1件ずつ書く(`cue vet` は矛盾しか検出せず、緩すぎる制約は
+  負例をぶつけて初めて検査できるため)
 - ドメインファイル(例: `statuses.cue`): 各概念に `id`, `preferredName`,
   `definition`, `relations`。**イベント(遷移・メッセージの名前)も概念として
   宣言する** — 図のラベルはイベントのidから語彙の表示名へ解決される。
@@ -158,7 +161,11 @@ CUEのid/名を参照し、独自に作り出さない。
 - `vocabulary.cue`: `vocabulary`(用語→{id,種別})、`glossary`(用語→{id,種別,定義})、
   `knownIds`、`relations`、参照整合性検査。`templates/` を出発点にする
 
-検証: `cue vet -c <specパス>`。
+検証: `bun <skill-dir>/tools/vet <specパス>`
+(`cue vet -c` を相対パス直接実行するとCUEのバージョンにより
+import path扱いで失敗するため、必ずラッパーを使う)。
+`tools/vet` は構造検証に加え、`positives/` の用例が通過し `negatives/` の
+用例が拒否されることも機械的に検査する。
 
 ### 3. Quintで振る舞いを書く
 
@@ -172,6 +179,11 @@ CUEのid/名を参照し、独自に作り出さない。
   (`myapp` → `MyappConstants`)、それ以外はspecのディレクトリ名
   (`apps/todo-cli/spec` → `TodoCliConstants`)。生成後に `constants.qnt` の
   `module` 行を確認し、`import` と揃える
+- **状態を変えない事象(拒否・重複拒否等)の二つの表現を使い分ける**:
+  `.fail()` で終わるテストは「その操作は不可能」の証明になり、図には出ない。
+  図に出したい事象は、観測専用のリスト変数(例: `var observedEvents: List[str]`。
+  ドメイン状態ではないので不変条件に使わない)へイベント定数を追加する
+  アクションとして表し、投影では `sequenceAppends` で検出する
 - 検証:
   ```sh
   quint typecheck <specパス>/<name>.qnt
@@ -198,6 +210,7 @@ CUEのid/名を参照し、独自に作り出さない。
   | `move` | 要素が集合Aから集合Bへ**移った** | 移った要素 |
   | `intDecreases` / `intIncreases` | 整数が**減った/増えた** | — |
   | `boolBecomes` | ブールが指定値に**変わった** | — |
+  | `sequenceAppends` | リスト(観測ログ)に要素が**加わった** | 加わった要素(`value` で特定のイベントに絞り込み可) |
 
 - `bind: "<name>"` で捕まえた値を、`message`/`transition` の `from`/`to` で
   `"$<name>"` として参照する。語彙のidのリテラルもそのまま書ける
@@ -229,6 +242,12 @@ bun <skill-dir>/tools/explain <specパス> --test <テスト名>  # 特定シナ
 bun <skill-dir>/tools/explain <specパス> --all-tests --output <パス>
     # 全シナリオの図を束ねてファイルへ(成果物として残す場合)
 ```
+
+解説書を単体で完結させるしかけ: specに任意の `about: {title, purpose, scope,
+exclusions}`(雛形 `about.cue`)を書くと、題名と概要(目的・対象範囲・除外範囲)が
+出力される。フェーズ0で合意した理解計画をここに記録する。また `tools/verify` は
+検証結果を `verify-result.json` に書き出し、`explain` が「検証」節として取り込む
+(不変条件名・成否・到達深度)。
 
 個別のビュー:
 ```sh
@@ -301,6 +320,7 @@ CUEとQuintが検査するのは、モデルへ入れた前提に対する整合
 
 | ツール | 役割 |
 |---|---|
+| `vet` | CUEの構造検証(`cue vet -c` をcwd非依存で包む) |
 | `explain` | 全部入り解説書: 用語表+概念マップ+振る舞い図を一つのMarkdownで(`--all-tests` で全シナリオを束ね、`--output` でファイルへ) |
 | `glossary` | CUEの `glossary` から用語表(Markdown表) |
 | `gen-mermaid-diagram` | CUEの語彙と関係から概念マップ(Mermaid `graph LR`) |
@@ -315,6 +335,11 @@ CUEとQuintが検査するのは、モデルへ入れた前提に対する整合
   `tools/verify` が頂層の `val <Name>: bool` をすべて抽出して全件検証し、
   「定義N件 / 指定N件 / 検証成功N件」を報告する(列挙漏れが構造的に起きない)。
   補助の補題は `def` / `pure def` で書く(不変条件として抽出されない)
+- `tools/verify` は深度4→8→12の**段階探索**(1段あたり既定60秒、`--depths` /
+  `--timeout` / `--max-steps` で調整)。検証コストは深度に対して掛け算で爆発しうり、
+  ちょうどいい深さはモデルごとに違う。到達した深度は必ず報告に残る。**浅い深度で
+  タイムアウトしたら、対象が拡散している徴候** — スコープの絞り直しか、重い表現の
+  抽象化(例: タイムスタンプを整数で表す)を利用者へ提案する
 - `quint test` は名前が `Test` で終わる `run` 定義だけ実行する(大文字小文字を区別)
 - `gen-quint-constants` はモジュール名のハイフンをサニタイズする
   (`todo-cli` → `TodoCliConstants`)
@@ -322,3 +347,6 @@ CUEとQuintが検査するのは、モデルへ入れた前提に対する整合
   `--test` で `quint test --match <名前>`。再現性には `--seed`
 - モデルは**健全だが完全ではない**。すべてを形式化しようとせず、
   検査する価値のあるものを形式化し、残りは散文で残す
+- `positives/`・`negatives/` は**標本検査**: 書かれた用例しか検証されない。
+  また負例が「拒否された」とき、意図した制約で拒否されたか、負例ファイル自体の
+  タイプミスで拒否されたかは区別できない

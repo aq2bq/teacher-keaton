@@ -16,7 +16,12 @@ export type DiffPredicate =
   | { kind: "move"; from: string; to: string; bind?: string }
   | { kind: "intDecreases"; var: string }
   | { kind: "intIncreases"; var: string }
-  | { kind: "boolBecomes"; var: string; value: boolean };
+  | { kind: "boolBecomes"; var: string; value: boolean }
+  // リスト(観測専用ログ等)への要素の追加を検出する。
+  // 拒否・重複拒否のようにドメイン状態を変えない事象は、観測専用の
+  // リスト変数への記録としてモデル化し、この述語で投影する。
+  // value を指定すると、追加された要素がその値を含む場合だけ成立する。
+  | { kind: "sequenceAppends"; var: string; value?: string; bind?: string };
 
 // from/to は「stable id のリテラル」または「"$<bind>" のバインディング参照」。
 // ラベルは持たない: 表示名はイベントのstable idから語彙(vocabulary)が解決する。
@@ -75,6 +80,12 @@ function asInt(state: TraceState, name: string): bigint | null {
   return null;
 }
 
+function asList(state: TraceState, name: string): string[] {
+  const value = unwrap(state[name]);
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => String(unwrap(item)));
+}
+
 // ---------- 述語の評価 ----------
 
 type PredicateResult = { holds: boolean; bindings: Record<string, string[]> };
@@ -130,6 +141,20 @@ function evaluatePredicate(
       const before = unwrap(prev[predicate.var]);
       const after = unwrap(curr[predicate.var]);
       return { holds: before !== predicate.value && after === predicate.value, bindings: {} };
+    }
+    case "sequenceAppends": {
+      const before = asList(prev, predicate.var);
+      const after = asList(curr, predicate.var);
+      const isPrefix = after.length >= before.length &&
+        before.every((item, index) => after[index] === item);
+      const appended = isPrefix ? after.slice(before.length) : [];
+      const matched = predicate.value === undefined
+        ? appended
+        : appended.filter((item) => item === predicate.value);
+      return {
+        holds: matched.length > 0,
+        bindings: predicate.bind ? { [predicate.bind]: matched } : {},
+      };
     }
   }
 }
@@ -212,6 +237,25 @@ export function validateProjectionVars(
     }
   }
   return errors;
+}
+
+// 投影仕様が参照する語彙のidを集める(event名と、バインディング・開始記号
+// 以外の from/to)。概念マップが「振る舞いの図が意味を担う概念」を除外する
+// 判断に使う。
+export function projectionVocabRefs(spec: ProjectionSpec): string[] {
+  const refs = new Set<string>();
+  for (const rule of spec.events ?? []) {
+    refs.add(rule.event);
+    for (const endpoint of [rule.message, rule.transition]) {
+      if (endpoint === undefined) continue;
+      for (const ref of [endpoint.from, endpoint.to]) {
+        if (!ref.startsWith("$") && ref !== "[*]") {
+          refs.add(ref);
+        }
+      }
+    }
+  }
+  return [...refs];
 }
 
 // バインディング参照("$x")を展開して、具体的なfrom/toの組を作る。

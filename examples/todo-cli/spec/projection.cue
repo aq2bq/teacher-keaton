@@ -31,5 +31,12 @@ projection: {
 			when: [{kind: "move", from: "doneTaskIds", to: "activeTaskIds"}]
 			transition: {from: "done", to: "active"}
 		},
+		// 状態を変えない事象(拒否)の例: 観測ログへの記録として検出し、
+		// 作業中状態の自己遷移として描く。
+		{
+			event: "event-reject-start-busy"
+			when: [{kind: "sequenceAppends", var: "observedEvents", value: "event-reject-start-busy"}]
+			transition: {from: "active", to: "active"}
+		},
 	]
 }

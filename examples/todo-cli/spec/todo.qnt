@@ -15,6 +15,9 @@ module Todo {
   var doneTaskIds: Set[int]
   var createdAtTaskIds: Set[int]
   var completedAtTaskIds: Set[int]
+  // 観測専用のログ。拒否のようにドメイン状態を変えない事象を記録する。
+  // ドメインの状態ではないので、不変条件には使わない。
+  var observedEvents: List[str]
 
   /// 3状態のいずれかに属する、現在存在するタスクのID。
   val currentTaskIds: Set[int] =
@@ -29,12 +32,13 @@ module Todo {
     and doneTaskIds' = Set()
     and createdAtTaskIds' = Set()
     and completedAtTaskIds' = Set()
+    and observedEvents' = List()
 
-  /// 1ステップ: 成功する変更コマンドまたは読み取りコマンドのいずれか。
+  /// 1ステップ: 成功する変更コマンド・読み取りコマンド・拒否の記録のいずれか。
   action step: bool = any {
     addTask(true), startSomeTask, completeSomeTask, reopenSomeTask,
     removeSomeTask, listAllTasks, listTasks(backlog), listTasks(active),
-    listTasks(done), showSomeTask,
+    listTasks(done), showSomeTask, attemptStartBusySomeTask,
   }
 
   /// 保存値を変えない読み取り操作で使う自己遷移。
@@ -46,6 +50,7 @@ module Todo {
     and doneTaskIds' = doneTaskIds
     and createdAtTaskIds' = createdAtTaskIds
     and completedAtTaskIds' = completedAtTaskIds
+    and observedEvents' = observedEvents
 
   /// 空白を除いたタイトルが空でなければ、nextIdでbacklogタスクを追加する。
   /// タイトル文字列そのものはCUEの#TaskTitleが検査し、ここでは前提の真偽だけを扱う。
@@ -60,6 +65,7 @@ module Todo {
     and doneTaskIds' = doneTaskIds
     and createdAtTaskIds' = createdAtTaskIds.union(Set(nextId))
     and completedAtTaskIds' = completedAtTaskIds
+    and observedEvents' = observedEvents
 
   /// backlogタスクだけをactiveへ移す。
   action startTask(id: int): bool =
@@ -71,6 +77,7 @@ module Todo {
     and doneTaskIds' = doneTaskIds
     and createdAtTaskIds' = createdAtTaskIds
     and completedAtTaskIds' = completedAtTaskIds
+    and observedEvents' = observedEvents
 
   /// activeタスクだけをdoneへ移し、completedAtが存在する状態にする。
   action completeTask(id: int): bool =
@@ -82,6 +89,7 @@ module Todo {
     and doneTaskIds' = doneTaskIds.union(Set(id))
     and createdAtTaskIds' = createdAtTaskIds
     and completedAtTaskIds' = completedAtTaskIds.union(Set(id))
+    and observedEvents' = observedEvents
 
   /// doneタスクだけをactiveへ戻し、completedAtを取り除く。
   action reopenTask(id: int): bool =
@@ -93,6 +101,7 @@ module Todo {
     and doneTaskIds' = doneTaskIds.exclude(Set(id))
     and createdAtTaskIds' = createdAtTaskIds
     and completedAtTaskIds' = completedAtTaskIds.exclude(Set(id))
+    and observedEvents' = observedEvents
 
   /// 現在存在するタスクを状態に関係なく除き、発行済みIDとnextIdは残す。
   action removeTask(id: int): bool =
@@ -104,6 +113,22 @@ module Todo {
     and doneTaskIds' = doneTaskIds.exclude(Set(id))
     and createdAtTaskIds' = createdAtTaskIds.exclude(Set(id))
     and completedAtTaskIds' = completedAtTaskIds.exclude(Set(id))
+    and observedEvents' = observedEvents
+
+  /// 作業中(active)のタスクを再び開始しようとした試みは拒否され、
+  /// 観測ログへ記録される。ドメイン状態は一切変えない。
+  /// 拒否を「不可能(.fail())」ではなく「記録される事象」として表すことで、
+  /// 状態を変えない事象も投影で図へ出せる。
+  action attemptStartBusyTask(id: int): bool =
+    activeTaskIds.contains(id)
+    and nextId' = nextId
+    and issuedIds' = issuedIds
+    and backlogTaskIds' = backlogTaskIds
+    and activeTaskIds' = activeTaskIds
+    and doneTaskIds' = doneTaskIds
+    and createdAtTaskIds' = createdAtTaskIds
+    and completedAtTaskIds' = completedAtTaskIds
+    and observedEvents' = observedEvents.append(eventRejectStartBusy)
 
   /// 全タスクの一覧表示。保存値は変えない。
   action listAllTasks: bool = keepStore
@@ -141,6 +166,11 @@ module Todo {
   action showSomeTask: bool = {
     nondet id = oneOf(currentTaskIds)
     all { showTask(id) }
+  }
+
+  action attemptStartBusySomeTask: bool = {
+    nondet id = oneOf(activeTaskIds)
+    all { attemptStartBusyTask(id) }
   }
 
   /// 3つの状態集合は重ならず、現存タスクは正確に1状態だけを持つ。
@@ -214,6 +244,16 @@ module Todo {
   /// 一度startしたactiveタスクを再びstartすることはできない。
   run startTwiceRejectedTest = {
     init.then(addTask(true)).then(startTask(1)).then(startTask(1)).fail()
+  }
+
+  /// 作業中タスクの再開始の試みは拒否され、観測ログに記録される。
+  /// ドメイン状態は変わらない(.fail()方式のstartTwiceRejectedTestと対比)。
+  run busyStartRecordedTest = {
+    init.then(addTask(true)).then(startTask(1)).then(attemptStartBusyTask(1)).then(all {
+      assert(observedEvents == List(eventRejectStartBusy)),
+      assert(activeTaskIds == Set(1)),
+      keepStore,
+    })
   }
 
   /// 削除したID 1は再利用せず、次の追加にID 2を使う。

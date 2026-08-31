@@ -44,3 +44,7 @@ projection: {
 //   move            要素が集合A→Bへ移った     (bind: 移った要素)
 //   intDecreases    整数が減った / intIncreases 整数が増えた
 //   boolBecomes     ブールが指定値に変わった
+//   sequenceAppends リスト(観測ログ)に要素が加わった (bind: 加わった要素)
+//                   value で特定のイベント定数に絞り込み可。
+//                   拒否のように状態を変えない事象は、観測専用リスト変数への
+//                   記録としてモデル化し、この述語で投影する。

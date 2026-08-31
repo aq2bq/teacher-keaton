@@ -31,4 +31,11 @@ events: {
 		definition:    "タスクを完了済みから作業中へ戻す。"
 		sources: [{location: "src/task.ts:71", note: "reopenTask"}]
 	}
+
+	rejectStartBusy: #Event & {
+		id:            "event-reject-start-busy"
+		preferredName: "重複開始を拒否"
+		definition:    "作業中のタスクを再び開始しようとした試みの拒否。ドメイン状態は変えず、観測ログにだけ記録される。"
+		sources: [{location: "src/task.ts:54", note: "startTask は backlog からの遷移だけを許す"}]
+	}
 }

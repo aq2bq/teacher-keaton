@@ -7,24 +7,45 @@
 // 手作業の列挙では1件落としても検知できない。このツールが検証対象一覧の
 // 正本を持つことで、列挙漏れを構造的に防ぐ。
 //
+// 深度戦略(段階探索):
+// 検証のコストは深度に対して掛け算で爆発しうる(組み合わせ爆発)。
+// ちょうどいい深さはモデルごとに違い、やってみるまで分からない。
+// そこで浅い深度から順に試し、段ごとに時間上限を設ける:
+//   - 反証が出たら即停止して報告する
+//   - ある深度で時間切れになったら打ち切り、そこまでの結果を報告する
+//   - 全段を通過したら最深の結果を報告する
+// どの時点で止まっても「どこまで保証できたか」(採用した探索深度)が記録に残る。
+// 浅い深度でも時間切れになるモデルは、対象が拡散している徴候であり、
+// スコープの絞り直しか抽象化の提案を利用者へ返す引き金にする。
+//
+// Apalacheの作業場(_apalache-out/)は、成果物の置き場所である keaton/ の中
+// (keaton/ が無いspecでは spec の中)に隔離する。
+// 検証成功時は削除し、反証が見つかったときだけ保持して保存場所を報告する。
+//
 // 規約: 不変条件は頂層の `val <Name>: bool` として書く。
 // 補助の補題は def / pure def で書く(不変条件として検証されない)。
 //
-//   tools/verify <specパス> [--max-steps <n>]
+//   tools/verify <specパス> [--depths 4,8,12] [--timeout <秒>] [--max-steps <n>]
+//
+// --max-steps は段階探索をせず単一深度で検証する(従来互換)。
 
-import { readdirSync, readFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { readdirSync, readFileSync, rmSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { join, resolve, dirname, basename } from "node:path";
 import { spawnSync } from "node:child_process";
 import { resolveSpecPath } from "./lib/quint";
 
 type Options = {
   specPath: string;
+  depths: number[];
+  timeoutSeconds: number;
   maxSteps?: number;
 };
 
 function usage(): void {
-  console.error("使い方: tools/verify [<specパス>] [--max-steps <n>]");
+  console.error("使い方: tools/verify [<specパス>] [--depths 4,8,12] [--timeout <秒>] [--max-steps <n>]");
   console.error("specパス省略時は keaton/spec を使います。");
+  console.error("--depths: 段階探索の深度列(既定 4,8,12)。--timeout: 1段あたりの秒(既定 60)。");
+  console.error("--max-steps: 段階探索をせず単一深度で検証する。");
 }
 
 function parseArguments(argv: string[]): Options | undefined {
@@ -34,16 +55,35 @@ function parseArguments(argv: string[]): Options | undefined {
     specArg = argv[0];
     index = 1;
   }
-  const options: Options = { specPath: resolveSpecPath(specArg) };
+  const options: Options = {
+    specPath: resolveSpecPath(specArg),
+    depths: [4, 8, 12],
+    timeoutSeconds: 60,
+  };
   for (; index < argv.length; index += 1) {
     const argument = argv[index];
     const next = argv[index + 1];
-    if (argument === "--max-steps") {
-      if (next === undefined) return undefined;
-      options.maxSteps = Number(next);
-      index += 1;
-    } else {
-      return undefined;
+    switch (argument) {
+      case "--depths": {
+        if (next === undefined) return undefined;
+        const parsed = next.split(",").map((part) => Number(part));
+        if (parsed.some((depth) => !Number.isInteger(depth) || depth <= 0)) return undefined;
+        options.depths = parsed;
+        index += 1;
+        break;
+      }
+      case "--timeout":
+        if (next === undefined) return undefined;
+        options.timeoutSeconds = Number(next);
+        index += 1;
+        break;
+      case "--max-steps":
+        if (next === undefined) return undefined;
+        options.maxSteps = Number(next);
+        index += 1;
+        break;
+      default:
+        return undefined;
     }
   }
   return options;
@@ -68,6 +108,78 @@ if (qntFiles.length === 0) {
 // run ブロック内のネストした val は対象外。
 const INVARIANT_DECL = /^ {2}val (\w+)\s*:\s*bool\b/;
 
+// Apalacheの作業場。Apalacheは cwd に `_apalache-out/` を作るため、
+// cwd を「成果物の置き場所である keaton/」(keaton/ が無いspecでは spec 自体)
+// にすれば、作業場は約束された領域の中に収まる。
+function workspaceFor(specPath: string): string {
+  const parent = dirname(specPath);
+  if (basename(parent) === "keaton") {
+    return parent;
+  }
+  return specPath;
+}
+
+type StageResult =
+  | { outcome: "pass" }
+  | { outcome: "violation" }
+  | { outcome: "timeout" }
+  | { outcome: "error"; status: number };
+
+// Apalacheは反証トレースを _apalache-out/server/<実行ディレクトリ>/violation*.*
+// へ書く。これを数階層だけ再帰的に探す。
+function hasViolationTrace(dir: string, depthBudget = 4): boolean {
+  if (!existsSync(dir) || depthBudget <= 0) {
+    return false;
+  }
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.name.includes("violation")) {
+      return true;
+    }
+    if (entry.isDirectory() && hasViolationTrace(join(dir, entry.name), depthBudget - 1)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function runVerify(file: string, invariants: string[], workspace: string, apalacheDir: string, depth: number): StageResult {
+  mkdirSync(workspace, { recursive: true });
+  const result = spawnSync(
+    "quint",
+    ["verify", file, "--invariants", ...invariants, "--max-steps", String(depth)],
+    {
+      cwd: workspace,
+      stdio: "inherit",
+      timeout: options.timeoutSeconds * 1000,
+    },
+  );
+  if (result.error !== undefined) {
+    console.error(`error: quint の起動に失敗しました: ${result.error.message}`);
+    return { outcome: "error", status: result.status ?? 1 };
+  }
+  if (result.signal === "SIGTERM" || result.status === null) {
+    return { outcome: "timeout" };
+  }
+  if (result.status === 0) {
+    return { outcome: "pass" };
+  }
+  // quint verify は反証発見時も非ゼロで終わる。作業場に残った
+  // violation のトレースで区別がつく。
+  return hasViolationTrace(apalacheDir)
+    ? { outcome: "violation" }
+    : { outcome: "error", status: result.status };
+}
+
+// 検証結果の機械可読な記録。explain が「検証」節として取り込み、
+// オンボーディング文書が単体で完結するようにする。
+type FileResult = {
+  file: string;
+  invariants: string[];
+  outcome: "pass" | "violation" | "timeout" | "error";
+  depthReached?: number;
+};
+const fileResults: FileResult[] = [];
+
 let failed = false;
 for (const file of qntFiles) {
   const text = readFileSync(join(resolved, file), "utf-8");
@@ -83,22 +195,67 @@ for (const file of qntFiles) {
     continue;
   }
 
-  const args = ["verify", join(resolved, file), "--invariants", ...invariants];
-  if (options.maxSteps !== undefined) {
-    args.push("--max-steps", String(options.maxSteps));
-  }
+  const workspace = workspaceFor(resolved);
+  const apalacheDir = join(workspace, "_apalache-out");
+  rmSync(apalacheDir, { recursive: true, force: true });
+  const depths = options.maxSteps !== undefined ? [options.maxSteps] : options.depths;
   console.log(
     `verifying ${file}: ${invariants.length} invariant(s) — ${invariants.join(", ")}`,
   );
-  const result = spawnSync("quint", args, { stdio: "inherit" });
-  if (result.status === 0) {
-    console.log(
-      `ok: ${file}: 定義${invariants.length}件 / 指定${invariants.length}件 / 検証成功${invariants.length}件`,
+  console.log(
+    `  深度戦略: ${depths.join(" → ")} (1段あたり ${options.timeoutSeconds}秒)`,
+  );
+
+  let lastPassDepth: number | undefined;
+  let stoppedAt: { depth: number; reason: "timeout" | "violation" | "error" } | undefined;
+  for (const depth of depths) {
+    console.log(`  深度 ${depth} を検証中...`);
+    const stage = runVerify(join(resolved, file), invariants, workspace, apalacheDir, depth);
+    if (stage.outcome === "pass") {
+      lastPassDepth = depth;
+      continue;
+    }
+    stoppedAt = { depth, reason: stage.outcome };
+    break;
+  }
+
+  if (stoppedAt?.reason === "violation") {
+    console.error(
+      `error: ${file}: 深度 ${stoppedAt.depth} で不変条件の反証が見つかりました`,
     );
-  } else {
-    console.error(`error: ${file}: 不変条件の検証に失敗しました`);
+    console.error(`  反証トレースの保存場所: ${apalacheDir}/`);
+    fileResults.push({ file, invariants, outcome: "violation", depthReached: stoppedAt.depth });
     failed = true;
+  } else if (stoppedAt !== undefined) {
+    console.error(
+      `error: ${file}: 深度 ${stoppedAt.depth} の検証に失敗しました` +
+        (stoppedAt.reason === "timeout"
+          ? `(タイムアウト: 1段${options.timeoutSeconds}秒)`
+          : ""),
+    );
+    if (lastPassDepth !== undefined) {
+      console.error(
+        `  深度 ${lastPassDepth} までは検証済みです。` +
+          "浅い深度での時間切れは、対象が拡散している徴候です。" +
+          "スコープの絞り直しか、重い表現(文字列のタイムスタンプ等)の抽象化を検討してください。",
+      );
+    }
+    console.error(`  Apalache作業場: ${apalacheDir}/`);
+    fileResults.push({ file, invariants, outcome: stoppedAt.reason, depthReached: lastPassDepth });
+    failed = true;
+  } else {
+    rmSync(apalacheDir, { recursive: true, force: true });
+    console.log(
+      `ok: ${file}: 定義${invariants.length}件 / 指定${invariants.length}件 / ` +
+        `検証成功${invariants.length}件 (探索深度 ${lastPassDepth})`,
+    );
+    fileResults.push({ file, invariants, outcome: "pass", depthReached: lastPassDepth });
   }
 }
+
+writeFileSync(
+  join(workspaceFor(resolved), "verify-result.json"),
+  JSON.stringify({ verifiedAt: new Date().toISOString(), results: fileResults }, null, 2) + "\n",
+);
 
 process.exit(failed ? 1 : 0);

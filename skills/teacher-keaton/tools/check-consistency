@@ -103,6 +103,15 @@ if (existsSync(join(resolved, "projection.cue"))) {
           `projection.cue: event "${rule.event}" は既知のCUE idではありません(イベントも概念として宣言する)`,
         );
       }
+      for (const predicate of rule.when ?? []) {
+        if (predicate.kind === "sequenceAppends" && predicate.value !== undefined) {
+          if (!knownIds.has(predicate.value)) {
+            errors.push(
+              `projection.cue: event "${rule.event}" の sequenceAppends.value "${predicate.value}" は既知のCUE idではありません`,
+            );
+          }
+        }
+      }
       for (const endpoint of [rule.message, rule.transition]) {
         if (endpoint === undefined) continue;
         for (const ref of [endpoint.from, endpoint.to]) {
