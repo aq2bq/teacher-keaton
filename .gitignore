@@ -5,6 +5,7 @@ node_modules/
 *.log
 .tmp/
 tmp/
+_apalache-out/
 
 # OS
 .DS_Store

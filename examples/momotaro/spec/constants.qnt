@@ -10,8 +10,10 @@ module MomotaroConstants {
   pure val charMonkey: str = "char-monkey"
   pure val charOni: str = "char-oni"
   pure val charPheasant: str = "char-pheasant"
+  pure val eventDepart: str = "event-depart"
+  pure val eventGive: str = "event-give"
   pure val itemKibidango: str = "item-kibidango"
   pure val itemMomo: str = "item-momo"
 
-  pure val knownIds: Set[str] = Set("char-dog", "char-grandma", "char-grandpa", "char-momo", "char-monkey", "char-oni", "char-pheasant", "item-kibidango", "item-momo")
+  pure val knownIds: Set[str] = Set("char-dog", "char-grandma", "char-grandpa", "char-momo", "char-monkey", "char-oni", "char-pheasant", "event-depart", "event-give", "item-kibidango", "item-momo")
 }

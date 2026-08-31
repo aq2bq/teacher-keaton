@@ -1,0 +1,104 @@
+#!/usr/bin/env bun
+
+// 不変条件の検証ラッパー。
+// .qnt から不変条件(頂層の val <Name>: bool)をすべて抽出して quint verify へ
+// 渡し、「定義N件 / 指定N件 / 検証成功N件」を報告する。
+// quint verify は --invariant(s) を渡さないとdeadlockしか検査しないため、
+// 手作業の列挙では1件落としても検知できない。このツールが検証対象一覧の
+// 正本を持つことで、列挙漏れを構造的に防ぐ。
+//
+// 規約: 不変条件は頂層の `val <Name>: bool` として書く。
+// 補助の補題は def / pure def で書く(不変条件として検証されない)。
+//
+//   tools/verify <specパス> [--max-steps <n>]
+
+import { readdirSync, readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { spawnSync } from "node:child_process";
+import { resolveSpecPath } from "./lib/quint";
+
+type Options = {
+  specPath: string;
+  maxSteps?: number;
+};
+
+function usage(): void {
+  console.error("使い方: tools/verify [<specパス>] [--max-steps <n>]");
+  console.error("specパス省略時は keaton/spec を使います。");
+}
+
+function parseArguments(argv: string[]): Options | undefined {
+  let index = 0;
+  let specArg: string | undefined;
+  if (argv.length > 0 && !argv[0].startsWith("--")) {
+    specArg = argv[0];
+    index = 1;
+  }
+  const options: Options = { specPath: resolveSpecPath(specArg) };
+  for (; index < argv.length; index += 1) {
+    const argument = argv[index];
+    const next = argv[index + 1];
+    if (argument === "--max-steps") {
+      if (next === undefined) return undefined;
+      options.maxSteps = Number(next);
+      index += 1;
+    } else {
+      return undefined;
+    }
+  }
+  return options;
+}
+
+const options = parseArguments(Bun.argv.slice(2));
+if (options === undefined) {
+  usage();
+  process.exit(1);
+}
+
+const resolved = resolve(options.specPath);
+const qntFiles = readdirSync(resolved).filter(
+  (file) => file.endsWith(".qnt") && file !== "constants.qnt",
+);
+if (qntFiles.length === 0) {
+  console.error(`error: ${resolved} に .qnt ファイルがありません`);
+  process.exit(1);
+}
+
+// 頂層(モジュール直下、2スペースインデント)の bool val だけを不変条件とみなす。
+// run ブロック内のネストした val は対象外。
+const INVARIANT_DECL = /^ {2}val (\w+)\s*:\s*bool\b/;
+
+let failed = false;
+for (const file of qntFiles) {
+  const text = readFileSync(join(resolved, file), "utf-8");
+  const invariants = text
+    .split("\n")
+    .map((line) => line.match(INVARIANT_DECL)?.[1])
+    .filter((name): name is string => name !== undefined);
+
+  if (invariants.length === 0) {
+    console.error(
+      `warning: ${file} に不変条件の宣言(頂層の val <Name>: bool)がありません`,
+    );
+    continue;
+  }
+
+  const args = ["verify", join(resolved, file), "--invariants", ...invariants];
+  if (options.maxSteps !== undefined) {
+    args.push("--max-steps", String(options.maxSteps));
+  }
+  console.log(
+    `verifying ${file}: ${invariants.length} invariant(s) — ${invariants.join(", ")}`,
+  );
+  const result = spawnSync("quint", args, { stdio: "inherit" });
+  if (result.status === 0) {
+    console.log(
+      `ok: ${file}: 定義${invariants.length}件 / 指定${invariants.length}件 / 検証成功${invariants.length}件`,
+    );
+  } else {
+    console.error(`error: ${file}: 不変条件の検証に失敗しました`);
+    failed = true;
+  }
+}
+
+process.exit(failed ? 1 : 0);

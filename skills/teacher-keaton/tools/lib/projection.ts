@@ -19,7 +19,9 @@ export type DiffPredicate =
   | { kind: "boolBecomes"; var: string; value: boolean };
 
 // from/to は「stable id のリテラル」または「"$<bind>" のバインディング参照」。
-export type Endpoint = { from: string; to: string; label: string };
+// ラベルは持たない: 表示名はイベントのstable idから語彙(vocabulary)が解決する。
+// 図に出る語を語彙の管理外で再入力させないための設計(立場: 語彙)。
+export type Endpoint = { from: string; to: string };
 
 export type ProjectionRule = {
   event: string;
@@ -176,6 +178,42 @@ export function detectEvents(trace: Trace, spec: ProjectionSpec): FiredEvent[][]
   return steps;
 }
 
+// 投影仕様の when が参照するQuint変数名を集める。
+// 変数名を間違えると述語が永远に成立せず「何も出ない図」になるため、
+// 宣言済みの変数と突合して事前に検出する(検査は check-consistency が行う)。
+export function referencedVars(spec: ProjectionSpec): string[] {
+  const refs: string[] = [];
+  for (const rule of spec.events) {
+    for (const predicate of rule.when) {
+      if (predicate.kind === "move") {
+        refs.push(predicate.from, predicate.to);
+      } else {
+        refs.push(predicate.var);
+      }
+    }
+  }
+  return refs;
+}
+
+// 投影仕様が参照する変数が宣言済みか検査し、未知の変数のエラー列を返す。
+export function validateProjectionVars(
+  spec: ProjectionSpec,
+  declaredVars: Iterable<string>,
+): string[] {
+  const declared = new Set(declaredVars);
+  const errors: string[] = [];
+  for (const rule of spec.events) {
+    for (const ref of referencedVars({ events: [rule] })) {
+      if (!declared.has(ref)) {
+        errors.push(
+          `projection.cue: event "${rule.event}" の when が未知のQuint変数 "${ref}" を参照`,
+        );
+      }
+    }
+  }
+  return errors;
+}
+
 // バインディング参照("$x")を展開して、具体的なfrom/toの組を作る。
 // バインディングが複数値なら、各値について1件ずつ展開する。
 export function expandEndpoints(
@@ -195,7 +233,7 @@ export function expandEndpoints(
   const result: Endpoint[] = [];
   for (const from of fromValues) {
     for (const to of toValues) {
-      result.push({ from, to, label: endpoint.label });
+      result.push({ from, to });
     }
   }
   return result;

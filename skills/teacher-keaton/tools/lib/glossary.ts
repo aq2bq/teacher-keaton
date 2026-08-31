@@ -1,10 +1,19 @@
 // グロッサリー(用語表)をMarkdownの表へレンダリングする。
-// 元データはCUEの glossary(用語→{id,種別,定義})。
+// 元データはCUEの glossary(用語→{id,種別,定義,任意で根拠})。
+
+// 観測事実の根拠位置。location は自由形式の位置表記
+// ("src/task.ts:1" / "出荷規則.md §3.2" / "在庫.xlsx 'ロット状態'シート")。
+// コード以外の文書を事実源にする場合も行番号に縛られないため。
+export type Source = {
+  location: string;
+  note?: string;
+};
 
 export type GlossaryEntry = {
   id: string;
   kind: string;
   definition: string;
+  sources?: Source[];
 };
 
 export type Glossary = Record<string, GlossaryEntry>;
@@ -12,6 +21,19 @@ export type Glossary = Record<string, GlossaryEntry>;
 // Markdownの表を壊さないよう、セル内の文字を整える。
 function sanitizeCell(text: string): string {
   return text.replace(/\|/g, "\\|").replace(/\s+/g, " ").trim();
+}
+
+function renderSources(sources: Source[] | undefined): string {
+  if (sources === undefined || sources.length === 0) {
+    return "";
+  }
+  return sources
+    .map((source) =>
+      source.note === undefined
+        ? source.location
+        : `${source.location} (${source.note})`,
+    )
+    .join(" / ");
 }
 
 export function renderGlossary(glossary: Glossary): string {
@@ -31,11 +53,16 @@ export function renderGlossary(glossary: Glossary): string {
     return 0;
   });
 
-  const lines = ["| 用語 | 種別 | 定義 |", "|---|---|---|"];
+  // 根拠を持つ概念が一つでもあれば根拠カラムを出す(無ければ表を細く保つ)。
+  const hasSources = entries.some(
+    ([, entry]) => entry.sources !== undefined && entry.sources.length > 0,
+  );
+  const lines = hasSources
+    ? ["| 用語 | 種別 | 定義 | 根拠 |", "|---|---|---|---|"]
+    : ["| 用語 | 種別 | 定義 |", "|---|---|---|"];
   for (const [term, entry] of entries) {
-    lines.push(
-      `| ${sanitizeCell(term)} | ${sanitizeCell(entry.kind)} | ${sanitizeCell(entry.definition)} |`,
-    );
+    const base = `| ${sanitizeCell(term)} | ${sanitizeCell(entry.kind)} | ${sanitizeCell(entry.definition)}`;
+    lines.push(hasSources ? `${base} | ${sanitizeCell(renderSources(entry.sources))} |` : `${base} |`);
   }
   return lines.join("\n") + "\n";
 }

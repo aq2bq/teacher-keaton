@@ -81,6 +81,10 @@
 | **フェーズ0でスコープ合意** | 対象が曖昧なままだと時間とクレジットを浪費し収束しないため |
 | **観測事実のみモデル化、意図は散文** | 願望をモデルに足すと照合の基準が壊れるため |
 | **コードだけでは決まらない食い違いは `keaton/TODO.md`** | 推測した前提を形式検証で補強せず、根拠と反証を人間の判断へ渡すため |
+| **`examples/` は配布しない(開発・回帰専用)** | 具体的な完成例は模倣の锚(アンカー)となって出力の収束を妨げ、行使をトークンヘビーにするため。配布物は `SKILL.md`+`templates/` だけで自己完結させる |
+| **図のラベルは語彙から解決する(イベントも概念)** | 図に出る語の自由記述を許すと、同じイベントがビューやセッションごとに別の言い方になり得て、認識のずれが生まれる。「図にはあるがモデルには無い語」というハルシネーションの露出面も消すため、ラベルはイベントのidから語彙の表示名へ解決し、`projection.cue` にラベルは書かない |
+| **形式化の範囲は `quintExpected` が正本** | 「健全だが完全ではない」が原則なので、全概念のQuint未使用を警告すると雑音になる(実適用で43中42件が警告)。行動の核だけ `vocabulary.cue` の `quintExpected` に宣言し、その未使用だけを「モデルの穴」として警告する |
+| **観測事実の根拠は概念の `sources` に残す** | 根拠のないモデルはハルシネーションと区別できない。特にコード以外(文書・表)を事実源にする適用で監査性を担保するため、`location` は自由形式(行番号に縛られない)で、用語表に根拠カラムとして出す |
 
 ---
 
@@ -107,6 +111,9 @@ teacher-keaton/
 `docs/` は継続開発のための人間向けドキュメントで、インストール対象には含まれない。
 したがって**エージェントが実行時に読むのは `SKILL.md` と `tools/`** であり、
 `docs/` の内容は必要なら `SKILL.md` 側に反映すること。
+`examples/` も同様にインストール対象外(手本であり回帰テスト、開発専用)。
+**配布物(`SKILL.md`/`templates/`/`tools/`)から、配布外のファイル
+(`docs/`・`examples/`)を参照してはならない**。必要な規約は `SKILL.md` へ蒸留する。
 
 ---
 
@@ -123,6 +130,9 @@ teacher-keaton/
   根拠と保留範囲を `keaton/TODO.md` に残してユーザーへ判断を求める。
 - **`SKILL.md` と `docs/` を乖離させる**。実行時に読まれるのは `SKILL.md`。
   手順や規約を変えたら両方を揃えること。
+- **配布物から配布外のファイルを参照する**。スキルは `skills/teacher-keaton/` だけが
+  コピーされてインストールされるため、`docs/`・`examples/` への参照はインストール先で
+  宙吊りになる。テストも配布先だけで完結しなければならない。
 
 ---
 
@@ -138,7 +148,11 @@ teacher-keaton/
 skills/teacher-keaton/tools/explain  examples/momotaro/spec  --test fullStoryTest
 skills/teacher-keaton/tools/explain  examples/todo-cli/spec  --test reopenTaskTest
 skills/teacher-keaton/tools/check-consistency examples/todo-cli/spec
+skills/teacher-keaton/tools/verify   examples/momotaro/spec  # 不変条件の全件検証(約6秒)
 ```
+
+`verify` を `examples/todo-cli` に対して行うと、タイムスタンプ文字列のSMT処理で
+数分以上かかるため、既定の回帰には含めない(必要なら `--max-steps` を絞る)。
 
 前提: `cue` / `quint` / `bun` が `PATH` に必要(`brew install cue quint bun`)。
 `examples/` は「手本であり回帰テスト」なので、ツールや規約を変えたら必ず通すこと。

@@ -45,6 +45,12 @@ vocabulary: {
 			kind: "item"
 		}
 	}
+	for name, e in events {
+		(e.preferredName): {
+			id:   e.id
+			kind: "event"
+		}
+	}
 }
 
 // グロッサリー(用語表)。vocabulary に定義を加えたもので、
@@ -65,11 +71,22 @@ glossary: {
 			definition: i.definition
 		}
 	}
+	for name, e in events {
+		(e.preferredName): {
+			id:         e.id
+			kind:       "event"
+			definition: e.definition
+		}
+	}
 }
 
 // 参照整合性: relation の target は既知の id でなければならない。
 // 未知の target があった場合のみ衝突するパスを生成して vet を失敗させる。
-knownIds: list.Concat([[for _, c in characters {c.id}], [for _, i in items {i.id}]])
+knownIds: list.Concat([[for _, c in characters {c.id}], [for _, i in items {i.id}], [for _, e in events {e.id}]])
+
+// Quintの振る舞いモデルに現れるべき概念。行動の核は仲間になる三匹。
+// それ以外の登場人物・アイテム・イベントは構造・投影専用なので挙げない。
+quintExpected: ["char-dog", "char-monkey", "char-pheasant"]
 
 for name, c in characters {
 	if c.relations != _|_ {

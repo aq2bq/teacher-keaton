@@ -6,6 +6,10 @@ module TodoCliConstants {
   pure val active: str = "active"
   pure val backlog: str = "backlog"
   pure val done: str = "done"
+  pure val eventAdd: str = "event-add"
+  pure val eventDone: str = "event-done"
+  pure val eventReopen: str = "event-reopen"
+  pure val eventStart: str = "event-start"
 
-  pure val knownIds: Set[str] = Set("active", "backlog", "done")
+  pure val knownIds: Set[str] = Set("active", "backlog", "done", "event-add", "event-done", "event-reopen", "event-start")
 }

@@ -2,12 +2,14 @@
 
 import { resolve, join } from "node:path";
 import { readdirSync, readFileSync, existsSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import {
   fetchKnownIds,
   generateConstants,
   moduleNameFor,
 } from "./lib/quint-constants.ts";
 import { resolveSpecPath } from "./lib/quint";
+import { validateProjectionVars, type ProjectionSpec } from "./lib/projection.ts";
 
 const resolved = resolve(resolveSpecPath(process.argv[2]));
 const ids = fetchKnownIds(resolved);
@@ -21,9 +23,11 @@ if (qntFiles.length === 0) {
 
 const errors: string[] = [];
 const usedIds = new Set<string>();
+const quintVars = new Set<string>();
 const JAPANESE = /[\u3040-\u30ff\u3400-\u9fff]/;
 const LITERAL = /"([^"\\]|\\.)*"/g;
 const CONSTANT_DEF = /pure val (\w+): str = "((?:[^"\\]|\\.)*)"/g;
+const VAR_DECL = /^\s*var (\w+)\s*:/;
 
 // 1. constants.qnt から 識別子 → id の対応を読む
 const constantsPath = join(resolved, "constants.qnt");
@@ -65,6 +69,12 @@ for (const file of qntFiles) {
         usedIds.add(id);
       }
     }
+    for (const line of text.split("\n")) {
+      const match = line.match(VAR_DECL);
+      if (match) {
+        quintVars.add(match[1]);
+      }
+    }
   }
 }
 
@@ -76,10 +86,56 @@ if (!existsSync(constantsPath)) {
   errors.push("constants.qnt がCUEのknownIdsと一致しません: tools/gen-quint-constants で再生成してください");
 }
 
-// 5. 警告: CUEに宣言済みだがQuintで未使用の概念(モデルの穴)
-for (const id of ids) {
-  if (!usedIds.has(id)) {
-    console.error(`warning: ${id} はCUEに宣言されていますがQuintのモデルで使用されていません`);
+// 5. projection.cue の検査。
+// - when が参照するQuint変数が宣言済みか(変名誤りで「何も出ない図」になるため)
+// - event / from / to がCUEの既知idか(図に出る語の原本は語彙。イベントも概念)
+if (existsSync(join(resolved, "projection.cue"))) {
+  const projectionResult = spawnSync("cue", ["export", ".", "-e", "projection"], {
+    cwd: resolved,
+    encoding: "utf-8",
+  });
+  if (projectionResult.status === 0) {
+    const projection = JSON.parse(projectionResult.stdout) as ProjectionSpec;
+    errors.push(...validateProjectionVars(projection, quintVars));
+    for (const rule of projection.events ?? []) {
+      if (!knownIds.has(rule.event)) {
+        errors.push(
+          `projection.cue: event "${rule.event}" は既知のCUE idではありません(イベントも概念として宣言する)`,
+        );
+      }
+      for (const endpoint of [rule.message, rule.transition]) {
+        if (endpoint === undefined) continue;
+        for (const ref of [endpoint.from, endpoint.to]) {
+          if (ref.startsWith("$") || ref === "[*]") continue;
+          if (!knownIds.has(ref)) {
+            errors.push(
+              `projection.cue: event "${rule.event}" の from/to "${ref}" は既知のCUE idではありません`,
+            );
+          }
+        }
+      }
+    }
+  }
+}
+
+// 6. 警告: quintExpected に挙がっているがQuintで未使用の概念(モデルの穴)。
+// quintExpected は「振る舞いのモデルに現れるべき概念」の正本(vocabulary.cue)。
+// リストに無い概念は構造・投影専用とみなし、Quint未使用を警告しない
+// (原則「健全だが完全ではない」— 全てを形式化しないのは正しい状態)。
+const expectedResult = spawnSync("cue", ["export", ".", "-e", "quintExpected"], {
+  cwd: resolved,
+  encoding: "utf-8",
+});
+if (expectedResult.status === 0) {
+  const quintExpected = JSON.parse(expectedResult.stdout) as string[];
+  for (const id of quintExpected) {
+    if (!knownIds.has(id)) {
+      errors.push(`vocabulary.cue: quintExpected の "${id}" は既知のCUE idではありません`);
+    } else if (!usedIds.has(id)) {
+      console.error(
+        `warning: ${id} はquintExpectedに挙がっていますがQuintのモデルで使用されていません(モデルの穴)`,
+      );
+    }
   }
 }
 

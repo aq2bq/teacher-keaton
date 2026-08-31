@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   detectEvents,
   expandEndpoints,
+  validateProjectionVars,
   type ProjectionSpec,
   type Trace,
 } from "./projection";
@@ -16,12 +17,12 @@ describe("detectEvents", () => {
     const spec: ProjectionSpec = {
       events: [
         {
-          event: "give",
+          event: "event-give",
           when: [
             { kind: "setGains", var: "companions", bind: "to" },
             { kind: "intDecreases", var: "dango" },
           ],
-          message: { from: "char-momo", to: "$to", label: "与える" },
+          message: { from: "char-momo", to: "$to" },
         },
       ],
     };
@@ -33,7 +34,7 @@ describe("detectEvents", () => {
     };
     const steps = detectEvents(trace, spec);
     expect(steps.length).toBe(1);
-    expect(steps[0][0].event).toBe("give");
+    expect(steps[0][0].event).toBe("event-give");
     expect(steps[0][0].bindings.to).toEqual(["char-dog"]);
   });
 
@@ -41,9 +42,9 @@ describe("detectEvents", () => {
     const spec: ProjectionSpec = {
       events: [
         {
-          event: "start",
+          event: "event-start",
           when: [{ kind: "move", from: "backlog", to: "active" }],
-          transition: { from: "backlog", to: "active", label: "start" },
+          transition: { from: "backlog", to: "active" },
         },
       ],
     };
@@ -55,19 +56,19 @@ describe("detectEvents", () => {
     };
     const steps = detectEvents(trace, spec);
     expect(steps.length).toBe(1);
-    expect(steps[0][0].event).toBe("start");
+    expect(steps[0][0].event).toBe("event-start");
   });
 
   test("when の一部が不成立なら発火しない", () => {
     const spec: ProjectionSpec = {
       events: [
         {
-          event: "give",
+          event: "event-give",
           when: [
             { kind: "setGains", var: "companions", bind: "to" },
             { kind: "intDecreases", var: "dango" },
           ],
-          message: { from: "a", to: "$to", label: "x" },
+          message: { from: "a", to: "$to" },
         },
       ],
     };
@@ -85,9 +86,9 @@ describe("detectEvents", () => {
     const spec: ProjectionSpec = {
       events: [
         {
-          event: "depart",
+          event: "event-depart",
           when: [{ kind: "boolBecomes", var: "departed", value: true }],
-          message: { from: "a", to: "a", label: "出発" },
+          message: { from: "a", to: "a" },
         },
       ],
     };
@@ -98,10 +99,43 @@ describe("detectEvents", () => {
   });
 });
 
+describe("validateProjectionVars", () => {
+  const spec: ProjectionSpec = {
+    events: [
+      {
+        event: "event-start",
+        when: [{ kind: "move", from: "backlogIds", to: "activeIds" }],
+        transition: { from: "backlog", to: "active" },
+      },
+      {
+        event: "event-give",
+        when: [
+          { kind: "setGains", var: "companions", bind: "to" },
+          { kind: "intDecreases", var: "dango" },
+        ],
+        message: { from: "a", to: "$to" },
+      },
+    ],
+  };
+
+  test("宣言済みの変数だけを参照していればエラーは無い", () => {
+    const declared = ["backlogIds", "activeIds", "companions", "dango"];
+    expect(validateProjectionVars(spec, declared)).toEqual([]);
+  });
+
+  test("未知の変数を参照していれば、イベント名付きで報告する", () => {
+    const declared = ["backlogIds", "companions", "dango"];
+    const errors = validateProjectionVars(spec, declared);
+    expect(errors).toEqual([
+      'projection.cue: event "event-start" の when が未知のQuint変数 "activeIds" を参照',
+    ]);
+  });
+});
+
 describe("expandEndpoints", () => {
   test("$bind を展開し、リテラルはそのまま通す", () => {
     const endpoints = expandEndpoints(
-      { from: "char-momo", to: "$to", label: "与える" },
+      { from: "char-momo", to: "$to" },
       { to: ["char-dog", "char-monkey"] },
     );
     expect(endpoints.length).toBe(2);
@@ -112,25 +146,28 @@ describe("expandEndpoints", () => {
 });
 
 describe("render", () => {
+  // 語彙: 参加者・状態に加え、イベントも概念として含む。
   const vocabulary = {
     "桃太郎": { id: "char-momo", kind: "character" },
     "犬": { id: "char-dog", kind: "character" },
     "未着手": { id: "backlog", kind: "status" },
     "作業中": { id: "active", kind: "status" },
+    "きびだんごを与える": { id: "event-give", kind: "event" },
+    "開始": { id: "event-start", kind: "event" },
   };
   const resolve = makeLabelResolver(vocabulary);
 
-  test("sequenceDiagram は語彙を表示名に解決する", () => {
+  test("sequenceDiagram のラベルはイベントの語彙表示名から解決する", () => {
     const spec: ProjectionSpec = {
       format: "sequenceDiagram",
       events: [
         {
-          event: "give",
+          event: "event-give",
           when: [
             { kind: "setGains", var: "companions", bind: "to" },
             { kind: "intDecreases", var: "dango" },
           ],
-          message: { from: "char-momo", to: "$to", label: "与える" },
+          message: { from: "char-momo", to: "$to" },
         },
       ],
     };
@@ -143,17 +180,17 @@ describe("render", () => {
     const output = render("sequenceDiagram", detectEvents(trace, spec), resolve);
     expect(output).toContain("participant N0 as 桃太郎");
     expect(output).toContain("participant N1 as 犬");
-    expect(output).toContain("N0->>N1: 与える");
+    expect(output).toContain("N0->>N1: きびだんごを与える");
   });
 
-  test("stateDiagram は状態遷移を描く", () => {
+  test("stateDiagram のラベルはイベントの語彙表示名から解決する", () => {
     const spec: ProjectionSpec = {
       format: "stateDiagram",
       events: [
         {
-          event: "start",
+          event: "event-start",
           when: [{ kind: "move", from: "backlog", to: "active" }],
-          transition: { from: "backlog", to: "active", label: "start" },
+          transition: { from: "backlog", to: "active" },
         },
       ],
     };
@@ -167,16 +204,16 @@ describe("render", () => {
     expect(output).toContain("stateDiagram-v2");
     expect(output).toContain("N0: 未着手");
     expect(output).toContain("N1: 作業中");
-    expect(output).toContain("N0 --> N1: start");
+    expect(output).toContain("N0 --> N1: 開始");
   });
 
-  test("json は形式非依存のイベント列を出力する", () => {
+  test("json は語彙で解決したラベルを載せたイベント列を出力する", () => {
     const spec: ProjectionSpec = {
       events: [
         {
-          event: "start",
+          event: "event-start",
           when: [{ kind: "move", from: "backlog", to: "active" }],
-          transition: { from: "backlog", to: "active", label: "start" },
+          transition: { from: "backlog", to: "active" },
         },
       ],
     };
@@ -189,10 +226,31 @@ describe("render", () => {
     const output = render("json", detectEvents(trace, spec), resolve);
     const parsed = JSON.parse(output);
     expect(parsed[0]).toEqual({
-      event: "start",
+      event: "event-start",
       from: "backlog",
       to: "active",
-      label: "start",
+      label: "開始",
     });
+  });
+
+  test("語彙に無いidは黙って図に出さず失敗する", () => {
+    const spec: ProjectionSpec = {
+      events: [
+        {
+          event: "event-unknown",
+          when: [{ kind: "move", from: "backlog", to: "active" }],
+          transition: { from: "backlog", to: "active" },
+        },
+      ],
+    };
+    const trace: Trace = {
+      states: [
+        { backlog: set("1"), active: set() },
+        { backlog: set(), active: set("1") },
+      ],
+    };
+    expect(() => render("stateDiagram", detectEvents(trace, spec), resolve)).toThrow(
+      "unknown id: event-unknown",
+    );
   });
 });

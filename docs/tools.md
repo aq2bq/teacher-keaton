@@ -15,16 +15,23 @@ Bunで実行する: `bun <skill-dir>/tools/<tool> [<specパス>] [オプショ�
 ```sh
 bun tools/explain <spec>                       # 観測(ランダムトレース)
 bun tools/explain <spec> --test <テスト名>      # 宣言(固定シナリオ)
+bun tools/explain <spec> --all-tests           # 全シナリオを束ねる
+bun tools/explain <spec> --output <パス>        # ファイルへ書く(成果物化)
 bun tools/explain <spec> --seed <値>           # 再現性固定
 bun tools/explain <spec> --max-steps <n>       # 探索ステップ数(既定12)
 ```
+
+`--all-tests` は `.qnt` の `run <名前>Test` をすべて列挙し、テストごとの図を
+`## 振る舞い` の下に `### <テスト名>` として束ねる。複数シナリオの成果物を
+一度に作る場合に使う(`--test` とは同時指定できない)。
 
 ビューは**適応型**。CUEの `glossary`/`relations`、`projection.cue` の `message`/`transition`
 の有無で判定し、合うものだけ出す。
 
 ## glossary — 用語表
 
-CUEの `glossary`(用語→{id,種別,定義})をMarkdown表で出す。
+CUEの `glossary`(用語→{id,種別,定義,任意で根拠})をMarkdown表で出す。
+概念に `sources` が宣言されていれば根拠カラムが出る。
 
 ```sh
 bun tools/glossary <spec>
@@ -80,7 +87,27 @@ bun tools/check-consistency <spec>
 1. `.qnt` 内の文字列リテラルがCUEの `knownIds` に存在するか(未知idは失敗)
 2. `.qnt` 内に日本語/生リテラルが無いか(用語の原本はCUE)
 3. `constants.qnt` がCUEの `knownIds` と一致するか(鮮度)
-4. 警告: CUEに宣言済みだがQuintで未使用の概念
+4. `projection.cue` の `when` が参照するQuint変数が宣言済みか
+   (変数名を間違えると「何も出ない図」になるため)
+5. `projection.cue` の `event`/`from`/`to` がCUEの既知idか
+   (図に出る語の原本は語彙。イベントも概念として宣言する)
+6. 警告: `vocabulary.cue` の `quintExpected` に挙がっているがQuintで未使用の
+   概念(モデルの穴)。リストに無い概念は構造・投影専用とみなし警告しない
+   (`quintExpected` の未知idは失敗)
+
+## verify — 不変条件の全件検証
+
+```sh
+bun tools/verify <spec> [--max-steps <n>]
+```
+
+`quint verify` は `--invariant(s)` を渡さないとdeadlockしか検査しない。
+手作業で列挙すると1件落としても検知できない。このツールは `.qnt` から
+不変条件をすべて抽出して `quint verify` へ渡し、検証対象一覧の正本を持つ。
+
+- 抽出規則: 頂層(2スペースインデント)の `val <Name>: bool`
+  - 補助の補題は `def` / `pure def` で書く(抽出されない)
+- 報告: `定義N件 / 指定N件 / 検証成功N件`。失敗時は非ゼロ終了
 
 ## ライブラリ(`lib/`)
 

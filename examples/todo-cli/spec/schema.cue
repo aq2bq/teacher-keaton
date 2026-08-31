@@ -64,10 +64,27 @@ emptyStore: #TaskStore & {
 	preferredName: string      @ja(名称)
 	definition:    string      @ja(定義)
 	relations?: [...#StatusTransition] @ja(状態遷移)
+	sources?: [...#Source] @ja(根拠)
 }
 
 // 実装が許す状態変更。target は既知の状態IDを指す。
 #StatusTransition: {
 	type:   "start" | "done" | "reopen" @ja(コマンド)
 	target: #TaskStatus                 @ja(遷移先)
+}
+
+// タスクの状態を変えるイベント。イベントも概念であり、語彙の管理を受ける。
+// 投影のラベルはイベントのidから表示名へ解決され、自由記述しない。
+#Event: {
+	id:            string @ja(識別子)
+	preferredName: string @ja(名称)
+	definition:    string @ja(定義)
+	sources?: [...#Source] @ja(根拠)
+}
+
+// 根拠。観測事実(実装が現に行うこと)をどこで観測したか。
+// 位置は自由形式の表記(ファイル:行番号、文書の節等)。
+#Source: {
+	location: string @ja(位置)
+	note?:    string @ja(注記)
 }

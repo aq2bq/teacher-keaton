@@ -25,3 +25,11 @@ package momotaro
 	definition:    string @ja(定義)
 	relations?:    [...#Relation] @ja(関係)
 }
+
+// イベント。物語の進行上の出来事も概念であり、語彙の管理を受ける。
+// 投影のラベルはイベントのidから表示名へ解決され、自由記述しない。
+#Event: {
+	id:            string @ja(識別子)
+	preferredName: string @ja(名称)
+	definition:    string @ja(定義)
+}

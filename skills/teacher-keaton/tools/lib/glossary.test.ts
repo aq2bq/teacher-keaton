@@ -38,4 +38,28 @@ describe("renderGlossary", () => {
     const output = renderGlossary(glossary);
     expect(output).toContain("a\\|b c");
   });
+
+  test("根拠を持つ概念があれば根拠カラムを出す", () => {
+    const glossary: Glossary = {
+      "未着手": {
+        id: "backlog",
+        kind: "status",
+        definition: "未着手の状態。",
+        sources: [{ location: "src/task.ts:1" }, { location: "設計書.md §2", note: "状態一覧" }],
+      },
+      "作業中": { id: "active", kind: "status", definition: "作業中の状態。" },
+    };
+    const output = renderGlossary(glossary);
+    expect(output).toContain("| 用語 | 種別 | 定義 | 根拠 |");
+    expect(output).toContain("src/task.ts:1 / 設計書.md §2 (状態一覧)");
+    // 根拠の無い概念は空セル
+    expect(output).toContain("| 作業中 | status | 作業中の状態。 |  |");
+  });
+
+  test("根拠を持つ概念が無ければ根拠カラムは出さない", () => {
+    const glossary: Glossary = {
+      "桃太郎": { id: "char-momo", kind: "character", definition: "桃から生まれた男の子。" },
+    };
+    expect(renderGlossary(glossary)).not.toContain("根拠");
+  });
 });

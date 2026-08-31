@@ -76,8 +76,8 @@ bun <skill-dir>/tools/explain                    # 既定の keaton/spec を使�
 bun <skill-dir>/tools/explain path/to/spec       # 明示的に指定
 ```
 
-ソースリポジトリの `examples/` に2つの完成例がある
-(`momotaro`=ナラティブ、`todo-cli`=状態機械)。
+新規specは `templates/`(雛形)から始める。2つの原型(ナラティブ/状態機械)の
+書き分けは `templates/README.md` と `templates/projection.cue` の注釈に示してある。
 
 ## 2つの層
 
@@ -151,7 +151,10 @@ CUEのid/名を参照し、独自に作り出さない。
 - `schema.cue`: エンティティのスキーマ・enum・構造制約
   (必須フィールド・型・値の範囲)。コードが読込時に行う検証を写し取る
 - ドメインファイル(例: `statuses.cue`): 各概念に `id`, `preferredName`,
-  `definition`, `relations`
+  `definition`, `relations`。**イベント(遷移・メッセージの名前)も概念として
+  宣言する** — 図のラベルはイベントのidから語彙の表示名へ解決される。
+  観測事実の根拠(ファイル:行番号、文書の節等)は任意の `sources` に残すと
+  用語表に根拠カラムが出て、監査できるようになる
 - `vocabulary.cue`: `vocabulary`(用語→{id,種別})、`glossary`(用語→{id,種別,定義})、
   `knownIds`、`relations`、参照整合性検査。`templates/` を出発点にする
 
@@ -165,11 +168,15 @@ CUEのid/名を参照し、独自に作り出さない。
   `bun <skill-dir>/tools/gen-quint-constants <specパス>`。`constants.qnt` が書かれる。
   `<name>.qnt` では `import <Module>Constants.* from "./constants"` して
   その定数を使い、**生文字列は使わない**
+- モジュール名はspecの位置から決まる: 既定の `keaton/spec` ならプロジェクト名
+  (`myapp` → `MyappConstants`)、それ以外はspecのディレクトリ名
+  (`apps/todo-cli/spec` → `TodoCliConstants`)。生成後に `constants.qnt` の
+  `module` 行を確認し、`import` と揃える
 - 検証:
   ```sh
   quint typecheck <specパス>/<name>.qnt
   quint test      <specパス>/<name>.qnt
-  quint verify    <specパス>/<name>.qnt --invariant <A>,<B>,<C>   # 不変条件は明示列挙
+  bun <skill-dir>/tools/verify <specパス>   # 不変条件(頂層 val X: bool)を全件検証
   ```
 
 ### 4. 投影を書く
@@ -177,7 +184,31 @@ CUEのid/名を参照し、独自に作り出さない。
 `projection.cue` を書く: 各意味のあるイベントについて、**どの状態変化がそれを
 引き起こすか**と**どう描画するか**(参加者間の `message` か、状態間の `transition` か)
 を宣言する。このファイルが、かつてツールにハードコードされていたドメイン解釈の
-置き場所である。`docs/conventions.md` と `examples/*/spec/projection.cue` を参照。
+置き場所である。`templates/projection.cue` が注釈付きの出発点になる。
+
+書き方の規約:
+
+- イベントは**差分述語(`when`)のAND**で検出する。最小の述語を組み合わせ、
+  足りないケースが出てから拡張する:
+
+  | 述語 | 検出する変化 | `bind` で捕まえる値 |
+  |---|---|---|
+  | `setGains` | 集合に要素が**加わった** | 加わった要素 |
+  | `setLoses` | 集合から要素が**減った** | 減った要素 |
+  | `move` | 要素が集合Aから集合Bへ**移った** | 移った要素 |
+  | `intDecreases` / `intIncreases` | 整数が**減った/増えた** | — |
+  | `boolBecomes` | ブールが指定値に**変わった** | — |
+
+- `bind: "<name>"` で捕まえた値を、`message`/`transition` の `from`/`to` で
+  `"$<name>"` として参照する。語彙のidのリテラルもそのまま書ける
+- `event` はCUEの既知id(イベントも概念として宣言する)。ラベルは書かず、
+  イベントのidから語彙の表示名が自動解決される。図に出る語を語彙の管理外で
+  作り出さないための規約であり、`check-consistency` が `event`/`from`/`to` の
+  既知id検査で強制する
+- `message`(参加者間のメッセージ、シーケンス図)と `transition`(状態間の遷移、
+  状態遷移図)は**どちらか一方に統一する**。`from`/`to` はCUEの語彙のid、
+  状態遷移の開始は `"[*]"`
+- `format` は `sequenceDiagram` か `stateDiagram`
 
 ### 5. 整合を検査する
 
@@ -185,13 +216,18 @@ CUEのid/名を参照し、独自に作り出さない。
 bun <skill-dir>/tools/check-consistency <specパス>
 ```
 Quintの文字列リテラルが既知のCUE idか、`.qnt` に日本語/生リテラルが漏れていないか、
-`constants.qnt` が新鮮かを検査する。
+`constants.qnt` が新鮮か、`projection.cue` の `when` が参照するQuint変数が
+宣言済みかを検査する。また `vocabulary.cue` の `quintExpected`(振る舞いに
+現れるべき概念の一覧)に挙がった概念のQuint未使用だけを「モデルの穴」として
+警告する — 構造・投影専用の概念は警告されず、信号対雑音比が保たれる。
 
 ### 6. 投影して照合する
 
 ```sh
 bun <skill-dir>/tools/explain <specパス>            # 全部入り解説書(Markdown)
 bun <skill-dir>/tools/explain <specパス> --test <テスト名>  # 特定シナリオ
+bun <skill-dir>/tools/explain <specパス> --all-tests --output <パス>
+    # 全シナリオの図を束ねてファイルへ(成果物として残す場合)
 ```
 
 個別のビュー:
@@ -253,6 +289,8 @@ CUEとQuintが検査するのは、モデルへ入れた前提に対する整合
 - **CUEが語彙の原本**: 表示名と定義はCUEに置く。Quintと図はCUEからラベルを
   解決し、名前をハードコードしない
 - **Quintに生文字列を置かない**: `constants.qnt` を参照。`check-consistency` が強制
+- **不変条件は頂層の `val <Name>: bool`**: `tools/verify` がこれを検証対象一覧の
+  正本として全件検証する。補助の補題は `def` / `pure def` で書く
 - **検証を通すために意味を発明しない**: 未解決の語彙と論理構造は `TODO.md` へ根拠付きで残す
 - **適応型ビュー**: システムに合うビューだけ出す。ナラティブはシーケンス図、
   状態機械は状態図。4つを強制しない
@@ -263,17 +301,20 @@ CUEとQuintが検査するのは、モデルへ入れた前提に対する整合
 
 | ツール | 役割 |
 |---|---|
-| `explain` | 全部入り解説書: 用語表+概念マップ+振る舞い図を一つのMarkdownで |
+| `explain` | 全部入り解説書: 用語表+概念マップ+振る舞い図を一つのMarkdownで(`--all-tests` で全シナリオを束ね、`--output` でファイルへ) |
 | `glossary` | CUEの `glossary` から用語表(Markdown表) |
 | `gen-mermaid-diagram` | CUEの語彙と関係から概念マップ(Mermaid `graph LR`) |
 | `project` | `projection.cue`+Quintトレースから振る舞い図(`--format sequenceDiagram\|stateDiagram\|json`) |
+| `verify` | 不変条件(頂層 `val X: bool`)を全件抽出して `quint verify` |
 | `gen-quint-constants` | CUEの `knownIds` から `constants.qnt` を生成 |
-| `check-consistency` | CUE↔Quintの語彙整合を検査 |
+| `check-consistency` | CUE↔Quintの語彙整合と投影の参照(変数・既知id)を検査 |
 
 ## 注意点
 
-- `quint verify` は `--invariant A,B,C` を渡さないと**deadlockしか検査しない**。
-  不変条件は必ず明示列挙する
+- `quint verify` は `--invariant(s)` を渡さないと**deadlockしか検査しない**。
+  `tools/verify` が頂層の `val <Name>: bool` をすべて抽出して全件検証し、
+  「定義N件 / 指定N件 / 検証成功N件」を報告する(列挙漏れが構造的に起きない)。
+  補助の補題は `def` / `pure def` で書く(不変条件として抽出されない)
 - `quint test` は名前が `Test` で終わる `run` 定義だけ実行する(大文字小文字を区別)
 - `gen-quint-constants` はモジュール名のハイフンをサニタイズする
   (`todo-cli` → `TodoCliConstants`)

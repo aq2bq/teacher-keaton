@@ -3,32 +3,33 @@ package todo
 // 投影仕様: タスクの状態変化を「状態遷移」として意味づける。
 // ナラティブ(参加者間の相互作用)ではないため、形式はシーケンス図でなく状態図。
 // 同じ汎用エンジン+仕様の仕組みで、システムの構造に合う形式を選べる実例。
+// ラベルは書かない: イベントのidから語彙が表示名を解決する。
 
 projection: {
 	format: "stateDiagram"
 	events: [
 		{
-			event: "add"
+			event: "event-add"
 			when: [
 				{kind: "setGains", var: "backlogTaskIds"},
 				{kind: "intIncreases", var: "nextId"},
 			]
-			transition: {from: "[*]", to: "backlog", label: "add"}
+			transition: {from: "[*]", to: "backlog"}
 		},
 		{
-			event: "start"
+			event: "event-start"
 			when: [{kind: "move", from: "backlogTaskIds", to: "activeTaskIds"}]
-			transition: {from: "backlog", to: "active", label: "start"}
+			transition: {from: "backlog", to: "active"}
 		},
 		{
-			event: "done"
+			event: "event-done"
 			when: [{kind: "move", from: "activeTaskIds", to: "doneTaskIds"}]
-			transition: {from: "active", to: "done", label: "done"}
+			transition: {from: "active", to: "done"}
 		},
 		{
-			event: "reopen"
+			event: "event-reopen"
 			when: [{kind: "move", from: "doneTaskIds", to: "activeTaskIds"}]
-			transition: {from: "done", to: "active", label: "reopen"}
+			transition: {from: "done", to: "active"}
 		},
 	]
 }

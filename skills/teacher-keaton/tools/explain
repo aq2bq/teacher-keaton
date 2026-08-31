@@ -3,7 +3,8 @@
 // 全部入り解説書ツール: 一つのシステムを「用語表・概念マップ・振る舞いの図」として
 // 一つのMarkdownにまとめて出力する。学習(オンボーディング)と分析の両方に使う。
 //
-//   tools/explain <specパス> [--test <テスト名>] [--seed <値>] [--max-steps <n>]
+//   tools/explain <specパス> [--test <テスト名> | --all-tests] [--seed <値>]
+//                 [--max-steps <n>] [--output <パス>]
 //
 // 4つのビューはすべてCUEの語彙とQuintの振る舞いから派生するため、用語と構造の
 // 整合性が構造的に保証される。ビューごとに適用可否を検出し、该系统統に合うものだけ出す:
@@ -11,8 +12,11 @@
 //   - 概念マップ   : CUEの relations があれば
 //   - シーケンス図 : projection.cue に message イベントがあれば
 //   - 状態遷移図   : projection.cue に transition イベントがあれば
+//
+// --all-tests は .qnt の `run <名前>Test` をすべて列挙し、シナリオごとの図を
+// 一つのMarkdownに束ねる(成果物化には --output でファイルへ書く)。
 
-import { cleanupTrace, cueExport, generateTrace, resolveSpecPath } from "./lib/quint";
+import { cleanupTrace, cueExport, findQuintInput, generateTrace, resolveSpecPath } from "./lib/quint";
 import { detectEvents, type ProjectionSpec, type Trace } from "./lib/projection";
 import { makeLabelResolver, render } from "./lib/render";
 import { renderGlossary, type Glossary } from "./lib/glossary";
@@ -22,12 +26,14 @@ import { basename, dirname, resolve } from "node:path";
 type Options = {
   specPath: string;
   testName?: string;
+  allTests: boolean;
+  output?: string;
   seed?: string;
   maxSteps: number;
 };
 
 function usage(): void {
-  console.error("使い方: tools/explain [<specパス>] [--test <テスト名>] [--seed <値>] [--max-steps <n>]");
+  console.error("使い方: tools/explain [<specパス>] [--test <テスト名> | --all-tests] [--seed <値>] [--max-steps <n>] [--output <パス>]");
   console.error("specパス省略時は keaton/spec を使います。");
 }
 
@@ -38,7 +44,7 @@ function parseArguments(argv: string[]): Options | undefined {
     specArg = argv[0];
     index = 1;
   }
-  const options: Options = { specPath: resolveSpecPath(specArg), maxSteps: 12 };
+  const options: Options = { specPath: resolveSpecPath(specArg), allTests: false, maxSteps: 12 };
   for (; index < argv.length; index += 1) {
     const argument = argv[index];
     const next = argv[index + 1];
@@ -46,6 +52,14 @@ function parseArguments(argv: string[]): Options | undefined {
       case "--test":
         if (next === undefined) return undefined;
         options.testName = next;
+        index += 1;
+        break;
+      case "--all-tests":
+        options.allTests = true;
+        break;
+      case "--output":
+        if (next === undefined) return undefined;
+        options.output = next;
         index += 1;
         break;
       case "--seed":
@@ -62,7 +76,25 @@ function parseArguments(argv: string[]): Options | undefined {
         return undefined;
     }
   }
+  if (options.testName !== undefined && options.allTests) {
+    console.error("error: --test と --all-tests は同時に指定できません");
+    return undefined;
+  }
   return options;
+}
+
+// .qnt からシナリオテスト(名前が Test で終わる run 定義)を列挙する。
+// quint test の規約と同じ命名規則を正本にする。
+async function listTestNames(specPath: string): Promise<string[]> {
+  const quintInput = await findQuintInput(specPath);
+  const text = await Bun.file(quintInput).text();
+  const names: string[] = [];
+  for (const match of text.matchAll(/^\s*run\s+(\w*Test)\s*=/gm)) {
+    if (!names.includes(match[1])) {
+      names.push(match[1]);
+    }
+  }
+  return names;
 }
 
 const options = parseArguments(Bun.argv.slice(2));
@@ -92,18 +124,6 @@ const hasSequence = projection.events.some((event) => event.message !== undefine
 const hasState = projection.events.some((event) => event.transition !== undefined);
 const needsTrace = hasSequence || hasState;
 
-// 振る舞いのビューがあればトレースを1本取得して共用する。
-let trace: Trace | undefined;
-let temporaryDirectory: string | undefined;
-if (needsTrace) {
-  const source = options.testName === undefined
-    ? { mode: "run" as const, seed: options.seed, maxSteps: options.maxSteps }
-    : { mode: "test" as const, testName: options.testName };
-  const generated = await generateTrace(resolvedSpecPath, source);
-  trace = await Bun.file(generated.path).json() as Trace;
-  temporaryDirectory = generated.directory;
-}
-
 const resolveLabel = makeLabelResolver(vocabulary);
 const fence = (diagram: string) => "```mermaid\n" + diagram + "```";
 
@@ -117,18 +137,51 @@ if (hasConceptMap) {
   sections.push("## 概念マップ", fence(generateConceptMap({ vocabulary, relations })));
 }
 
-if (hasSequence && trace !== undefined) {
+if (needsTrace && options.allTests) {
+  // 全シナリオ: テストを列挙し、テストごとの図を一つのMarkdownに束ねる。
+  const testNames = await listTestNames(resolvedSpecPath);
+  if (testNames.length === 0) {
+    console.error("error: Test で終わる run 定義が見つかりません");
+    process.exit(1);
+  }
+  sections.push("## 振る舞い");
+  for (const testName of testNames) {
+    const generated = await generateTrace(resolvedSpecPath, { mode: "test", testName });
+    const trace = await Bun.file(generated.path).json() as Trace;
+    const steps = detectEvents(trace, projection);
+    const testSections: string[] = [`### ${testName}`];
+    if (hasSequence) {
+      testSections.push(fence(render("sequenceDiagram", steps, resolveLabel)));
+    }
+    if (hasState) {
+      testSections.push(fence(render("stateDiagram", steps, resolveLabel)));
+    }
+    sections.push(testSections.join("\n"));
+    await cleanupTrace(generated.directory);
+  }
+} else if (needsTrace) {
+  // 単一トレース: 既定はランダム実行(観測)、--test で固定シナリオ(宣言)。
+  const source = options.testName === undefined
+    ? { mode: "run" as const, seed: options.seed, maxSteps: options.maxSteps }
+    : { mode: "test" as const, testName: options.testName };
+  const generated = await generateTrace(resolvedSpecPath, source);
+  const trace = await Bun.file(generated.path).json() as Trace;
   const steps = detectEvents(trace, projection);
-  sections.push("## シーケンス図", fence(render("sequenceDiagram", steps, resolveLabel)));
+
+  if (hasSequence) {
+    sections.push("## シーケンス図", fence(render("sequenceDiagram", steps, resolveLabel)));
+  }
+  if (hasState) {
+    sections.push("## 状態遷移図", fence(render("stateDiagram", steps, resolveLabel)));
+  }
+
+  await cleanupTrace(generated.directory);
 }
 
-if (hasState && trace !== undefined) {
-  const steps = detectEvents(trace, projection);
-  sections.push("## 状態遷移図", fence(render("stateDiagram", steps, resolveLabel)));
-}
-
-process.stdout.write(sections.join("\n") + "\n");
-
-if (temporaryDirectory !== undefined) {
-  await cleanupTrace(temporaryDirectory);
+const document = sections.join("\n") + "\n";
+if (options.output !== undefined) {
+  await Bun.write(options.output, document);
+  console.error(`wrote ${options.output}`);
+} else {
+  process.stdout.write(document);
 }

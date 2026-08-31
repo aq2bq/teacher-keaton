@@ -9,6 +9,8 @@ import {
 } from "./projection";
 
 // CUEのvocabularyは「呼称→{id,kind}」なので、表示用に「id→呼称」へ反転する。
+// 未知のidは黙って通さず失敗する: 図に出る語はすべて語彙に存在しなければならず、
+// 語彙に無い語が図に混ざる(=モデルに存在しない語の生成)を防ぐ。
 export type LabelResolver = (id: string) => string;
 
 export function makeLabelResolver(
@@ -18,11 +20,17 @@ export function makeLabelResolver(
   for (const [label, entry] of Object.entries(vocabulary)) {
     labelById.set(entry.id, label);
   }
-  return (id: string) => labelById.get(id) ?? id;
+  return (id: string) => {
+    const label = labelById.get(id);
+    if (label === undefined) {
+      throw new Error(`unknown id: ${id} — CUEのvocabularyに存在しません`);
+    }
+    return label;
+  };
 }
 
 // 発火イベント列を、バインディング展開済みの具体イベントへ潰す。
-type Expanded = { event: string; from: string; to: string; label: string };
+type Expanded = { event: string; from: string; to: string };
 
 function expandAll(steps: FiredEvent[][], key: "message" | "transition"): Expanded[] {
   const result: Expanded[] = [];
@@ -31,7 +39,7 @@ function expandAll(steps: FiredEvent[][], key: "message" | "transition"): Expand
       const endpoint = fired[key];
       if (!endpoint) continue;
       for (const e of expandEndpoints(endpoint, fired.bindings)) {
-        result.push({ event: fired.event, from: e.from, to: e.to, label: e.label });
+        result.push({ event: fired.event, from: e.from, to: e.to });
       }
     }
   }
@@ -62,7 +70,7 @@ export function renderSequenceDiagram(
     lines.push(`  participant ${aliases.get(id)} as ${resolve(id)}`);
   }
   for (const e of events) {
-    lines.push(`  ${aliases.get(e.from)}->>${aliases.get(e.to)}: ${e.label}`);
+    lines.push(`  ${aliases.get(e.from)}->>${aliases.get(e.to)}: ${resolve(e.event)}`);
   }
   return lines.join("\n") + "\n";
 }
@@ -87,18 +95,21 @@ export function renderStateDiagram(
   for (const e of events) {
     const fromAlias = e.from === "[*]" ? "[*]" : aliases.get(e.from);
     const toAlias = e.to === "[*]" ? "[*]" : aliases.get(e.to);
-    const key = `${fromAlias}->${toAlias}:${e.label}`;
+    const label = resolve(e.event);
+    const key = `${fromAlias}->${toAlias}:${label}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    lines.push(`  ${fromAlias} --> ${toAlias}: ${e.label}`);
+    lines.push(`  ${fromAlias} --> ${toAlias}: ${label}`);
   }
   return lines.join("\n") + "\n";
 }
 
 // 形式非依存のイベント列そのものをJSONで出す(投影の中間表現)。
-export function renderJson(steps: FiredEvent[][]): string {
+// ラベルはイベントのstable idから語彙の表示名へ解決したものを載せる。
+export function renderJson(steps: FiredEvent[][], resolve: LabelResolver): string {
   const flat = expandAll(steps, "message").concat(expandAll(steps, "transition"));
-  return JSON.stringify(flat, null, 2) + "\n";
+  const labeled = flat.map((e) => ({ ...e, label: resolve(e.event) }));
+  return JSON.stringify(labeled, null, 2) + "\n";
 }
 
 export function render(
@@ -112,7 +123,7 @@ export function render(
     case "stateDiagram":
       return renderStateDiagram(steps, resolve);
     case "json":
-      return renderJson(steps);
+      return renderJson(steps, resolve);
     default:
       throw new Error(`unknown format: ${format}`);
   }

@@ -54,10 +54,14 @@ Rubyの `spec/`(RSpec)など各言語の慣習と衝突しないよう、専用�
 ## 安定識別子(stable id)
 
 - 各概念に、**改名しても変わらない** id を付ける。
-- 種別ごとに接頭辞を付ける: `char-`(登場人物)、`item-`(アイテム)。
-  状態は状態名そのもの(`backlog`)を id にしてよい。
+- 種別ごとに接頭辞を付ける: `char-`(登場人物)、`item-`(アイテム)、
+  `event-`(イベント)。状態は状態名そのもの(`backlog`)を id にしてよい。
 - 表示名(`preferredName`)と identity(id)を分離する。図・会話では表示名を、
   データでは id を使う。
+- 観測事実の根拠は任意の `sources: [{location, note?}]` に残す。`location` は
+  自由形式の位置表記(`"src/task.ts:1"` / `"出荷規則.md §3.2"` /
+  `"在庫.xlsx 'ロット状態'シート"`)。コード以外の文書を事実源にする場合も
+  行番号に縛られない。宣言すると用語表に根拠カラムが出て監査できる。
 
 ## vocabulary.cue の構造
 
@@ -79,6 +83,11 @@ glossary: {
 // Quint定数の元になる既知idの一覧。
 knownIds: [for _, x in <concepts> {x.id}]
 
+// Quintの振る舞いモデルに現れるべき概念(行動の核)のid一覧。
+// check-consistency はここに挙がった概念のQuint未使用だけを警告する。
+// 構造専用(用語表・概念マップのみ)や投影専用(イベント等)の概念は挙げない。
+quintExpected: [ ... ]
+
 // 図示用の関係リスト {from, to, label}。
 relations: [ ... ]
 ```
@@ -86,11 +95,18 @@ relations: [ ... ]
 `vocabulary` と `glossary` は概念データから**自動生成**する(二重管理しない)。
 同じ表示名が複数のidを持つと unification が衝突し、一意性が構造的に強制される。
 
+`quintExpected` は「どの概念を振る舞いとして形式化するつもりか」の正本。
+原則は**健全だが完全ではない** — 全概念の形式化は目指さず、行動の核だけ挙げる。
+リスト外の概念は構造・投影専用とみなされ、Quint未使用を警告されない。
+
 ## Quint の書き方
 
 - `constants.qnt` は `gen-quint-constants` で生成する。手編集しない。
 - `<name>.qnt` の先頭で `import <Module>Constants.* from "./constants"`。
 - 状態・遷移・不変条件を書く。文字列リテラルは使わず定数を参照する。
+- **不変条件は頂層の `val <Name>: bool`** として書く。`tools/verify` が
+  これを抽出して全件検証する(検証対象一覧の正本)。補助の補題は
+  `def` / `pure def` で書く(不変条件として抽出されない)。
 - `run` で書くシナリオテストは、名前を `Test` で終わらせる
   (`quint test` は `Test` 结尾の `run` だけ実行する)。
 
@@ -110,20 +126,24 @@ relations: [ ... ]
 
 ## projection.cue の書き方(核心)
 
-「どの状態変化が・誰から誰への/どの状態からどの状態への・何というイベントか」を
+「どの状態変化が・誰から誰への/どの状態からどの状態への・どのイベントか」を
 宣言する。汎用ツール `project`/`explain` がこれを評価する。
+
+**イベントも概念であり、ラベルは書かない。** イベントはドメインファイルに
+概念として宣言し(`event-` 接頭辞推奨)、表示名はイベントのidから語彙が解決する。
+図に出る語を語彙の管理外で再入力させないための規約である。
 
 ```cue
 projection: {
   format: "sequenceDiagram"   // 既定の形式: sequenceDiagram | stateDiagram
   events: [
     {
-      event: "give"
+      event: "event-give"     // CUEの既知id(概念として宣言したイベント)
       when: [
         {kind: "setGains", var: "companions", bind: "to"},
         {kind: "intDecreases", var: "dango"},
       ]
-      message: {from: "char-momo", to: "$to", label: "きびだんごを与える"}
+      message: {from: "char-momo", to: "$to"}
     },
   ]
 }
@@ -151,6 +171,8 @@ projection: {
   `from`/`to` は語彙のid。
 - `transition`: **状態間の遷移**(状態遷移図)。状態機械向き。
   `from`/`to` は状態のid。開始は `"[*]"`。
+- ラベルはどちらにも書かない。イベントのidから語彙の表示名へ解決される。
+  `event`/`from`/`to` が既知idかは `check-consistency` が検査する。
 
 一つのプロジェクションは `message` か `transition` のどちらか一方に統一する。
 `explain` は `message` があればシーケンス図、`transition` があれば状態図を出す(適応型)。
