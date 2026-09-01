@@ -2,7 +2,7 @@
 
 // 不変条件の検証ラッパー。
 // .qnt から不変条件(頂層の val <Name>: bool)をすべて抽出して quint verify へ
-// 渡し、「定義N件 / 指定N件 / 検証成功N件」を報告する。
+// 渡し、「定義N件 / 指定N件 / 反証なしN件」を探索深度とともに報告する。
 // quint verify は --invariant(s) を渡さないとdeadlockしか検査しないため、
 // 手作業の列挙では1件落としても検知できない。このツールが検証対象一覧の
 // 正本を持つことで、列挙漏れを構造的に防ぐ。
@@ -20,7 +20,7 @@
 //
 // Apalacheの作業場(_apalache-out/)は、成果物の置き場所である keaton/ の中
 // (keaton/ が無いspecでは spec の中)に隔離する。
-// 検証成功時は削除し、反証が見つかったときだけ保持して保存場所を報告する。
+// 全探索深度で反証がない場合は削除し、反証が見つかったときだけ保持して保存場所を報告する。
 //
 // 規約: 不変条件は頂層の `val <Name>: bool` として書く。
 // 補助の補題は def / pure def で書く(不変条件として検証されない)。
@@ -222,7 +222,7 @@ async function runVerify(
     : { outcome: "error", status: exitCode };
 }
 
-// 検証結果の機械可読な記録。explain が「検証」節として取り込み、
+// 検証結果の機械可読な記録。explain が「形式モデルの検証」節として取り込み、
 // オンボーディング文書が単体で完結するようにする。
 type FileResult = {
   file: string;
@@ -286,7 +286,7 @@ for (const file of qntFiles) {
     );
     if (lastPassDepth !== undefined) {
       console.error(
-        `  深度 ${lastPassDepth} までは検証済みです。` +
+        `  深度 ${lastPassDepth} までは不変条件の反証は見つかっていません。` +
           "浅い深度での時間切れは、対象が拡散している徴候です。" +
           "スコープの絞り直しか、重い表現(文字列のタイムスタンプ等)の抽象化を検討してください。",
       );
@@ -297,8 +297,9 @@ for (const file of qntFiles) {
   } else {
     rmSync(apalacheDir, { recursive: true, force: true });
     console.log(
-      `ok: ${file}: 定義${invariants.length}件 / 指定${invariants.length}件 / ` +
-        `検証成功${invariants.length}件 (探索深度 ${lastPassDepth})`,
+      `ok: ${file}: 形式モデルの不変条件 定義${invariants.length}件 / ` +
+        `指定${invariants.length}件 / 反証なし${invariants.length}件 ` +
+        `(探索深度 ${lastPassDepth})`,
     );
     fileResults.push({ file, invariants, outcome: "pass", depthReached: lastPassDepth });
   }

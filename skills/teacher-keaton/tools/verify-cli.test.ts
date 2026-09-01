@@ -77,7 +77,9 @@ describe("verify の出力", () => {
     const result = await run(workspace);
 
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("検証成功1件 (探索深度 1)");
+    expect(result.stdout).toContain(
+      "形式モデルの不変条件 定義1件 / 指定1件 / 反証なし1件 (探索深度 1)",
+    );
     expect(result.stdout).toContain("詳細ログ:");
     expect(result.stdout).not.toContain("fake quint stdout");
     expect(result.stderr).not.toContain("fake quint stderr");

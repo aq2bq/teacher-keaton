@@ -200,13 +200,19 @@ if (about !== undefined && (about.purpose !== undefined || about.scope !== undef
 }
 
 if (verifyResult !== undefined) {
-  const lines: string[] = [`## 検証 (${verifyResult.verifiedAt})`];
+  const lines: string[] = [
+    `## 形式モデルの検証 (${verifyResult.verifiedAt})`,
+    "",
+    "> この結果は、形式モデルに置いた前提に対する、結果に記載された探索深度までの不変条件検査です。" +
+      "教育・記録・遵守を含む現場運用の実効性は検証していません。",
+    "",
+  ];
   for (const result of verifyResult.results) {
     const total = result.invariants.length;
     switch (result.outcome) {
       case "pass":
         lines.push(
-          `- ${result.file}: 不変条件 ${total}/${total} 件検証済み` +
+          `- ${result.file}: 不変条件 ${total}/${total} 件で反証なし` +
             ` (探索深度 ${result.depthReached ?? "?"})`,
         );
         break;
@@ -216,7 +222,7 @@ if (verifyResult !== undefined) {
       default:
         lines.push(
           `- ${result.file}: 検証未完了 (${result.outcome})` +
-            (result.depthReached !== undefined ? ` — 深度 ${result.depthReached} までは検証済み` : ""),
+            (result.depthReached !== undefined ? ` — 深度 ${result.depthReached} までは反証なし` : ""),
         );
     }
     lines.push(`  - 対象: ${result.invariants.join(", ")}`);

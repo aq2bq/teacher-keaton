@@ -4,9 +4,11 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   readdirSync,
   rmSync,
   statSync,
+  writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -50,7 +52,7 @@ describe("成果物の出力先", () => {
     expect(temporaryRootForSpec(existingSpec)).toBe(tmpdir());
   });
 
-  test("explain は通常経路の解説書を keaton/explanation.md に保存する", () => {
+  test("explain は形式モデルの検証範囲を明示して keaton/explanation.md に保存する", () => {
     const workspace = mkdtempSync(join(tmpdir(), "keaton-explain-test-"));
     temporaryDirectories.push(workspace);
     mkdirSync(join(workspace, "keaton"));
@@ -58,6 +60,18 @@ describe("成果物の出力先", () => {
       resolve(import.meta.dir, "../fixtures/measure-spec"),
       join(workspace, "keaton/spec"),
       { recursive: true },
+    );
+    writeFileSync(
+      join(workspace, "keaton/verify-result.json"),
+      JSON.stringify({
+        verifiedAt: "2026-09-01T00:00:00.000Z",
+        results: [{
+          file: "model.qnt",
+          invariants: ["Always"],
+          outcome: "pass",
+          depthReached: 12,
+        }],
+      }),
     );
 
     const result = Bun.spawnSync(
@@ -70,6 +84,10 @@ describe("成果物の出力先", () => {
     expect(result.stderr.toString()).toContain("keaton/explanation.md");
     expect(existsSync(join(workspace, "keaton/explanation.md"))).toBe(true);
     expect(statSync(join(workspace, "keaton/explanation.md")).size).toBeGreaterThan(0);
+    const explanation = readFileSync(join(workspace, "keaton/explanation.md"), "utf-8");
+    expect(explanation).toContain("## 形式モデルの検証");
+    expect(explanation).toContain("不変条件 1/1 件で反証なし (探索深度 12)");
+    expect(explanation).toContain("現場運用の実効性は検証していません");
     expect(readdirSync(join(workspace, "keaton/tmp"))).toEqual([]);
   });
 });

@@ -346,9 +346,10 @@ bun <skill-dir>/tools/explain <specパス> --all-tests --output keaton/explanati
 解説書を単体で完結させるしかけ: specに任意の `about: {title, purpose, scope,
 exclusions}`(雛形 `about.cue`)を書くと、題名と概要(目的・対象範囲・除外範囲)が
 出力される。フェーズ0で合意した理解計画をここに記録する。また `tools/verify` は
-検証結果を `verify-result.json` に書き出し、`explain` が「検証」節として取り込む
-(不変条件名・成否・到達深度)。Quint・Apalacheの詳細は常に `verify.log` へ保存し、
-`--verbose` 指定時だけ同じ内容を端末にも表示する。
+検証結果を `verify-result.json` に書き出し、`explain` が「形式モデルの検証」節として
+取り込む(不変条件名・成否・到達深度)。同節は、教育・記録・遵守を含む現場運用の
+実効性が検証対象外であることも明示する。Quint・Apalacheの詳細は常に
+`verify.log` へ保存し、`--verbose` 指定時だけ同じ内容を端末にも表示する。
 
 個別のビュー:
 ```sh
@@ -383,6 +384,8 @@ bun <skill-dir>/tools/project             <specパス>   # 振る舞い図(シ�
 
 CUEとQuintが検査するのは、モデルへ入れた前提に対する整合性である。
 検証を通すために語彙や制約を推測で補うと、誤った前提を形式手法が補強してしまう。
+結果に記載された探索深度までQuintで反証が見つからなくても、教育・記録・遵守を含む
+現場運用の実効性は検証していない。解説書と最終報告では両者を明確に分ける。
 
 検証失敗、Quintの反証(counterexample)、または実コードとの食い違いを見つけたら、
 次のように処理する:
@@ -459,7 +462,8 @@ CUEとQuintが検査するのは、モデルへ入れた前提に対する整合
 
 - `quint verify` は `--invariant(s)` を渡さないと**deadlockしか検査しない**。
   `tools/verify` が頂層の `val <Name>: bool` をすべて抽出して全件検証し、
-  「定義N件 / 指定N件 / 検証成功N件」を報告する(列挙漏れが構造的に起きない)。
+  「形式モデルの不変条件 定義N件 / 指定N件 / 反証なしN件」を探索深度とともに
+  報告する(列挙漏れが構造的に起きない)。これは現場運用の適合証明ではない。
   補助の補題は `def` / `pure def` で書く(不変条件として抽出されない)
 - `tools/verify` は深度4→8→12の**段階探索**(1段あたり既定60秒、`--depths` /
   `--timeout` / `--max-steps` で調整)。検証コストは深度に対して掛け算で爆発しうり、
