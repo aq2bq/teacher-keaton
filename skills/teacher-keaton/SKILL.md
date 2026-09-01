@@ -71,6 +71,7 @@ keaton/
 ├── explanation.md       照合に使う解説書
 ├── TODO.md              未解決の食い違いがある場合だけ作る
 ├── verify-result.json   不変条件の検証結果
+├── verify.log           Quint・Apalacheの検証詳細ログ。最新実行で上書きする
 ├── tmp/                 トレースと検査用コピー。通常処理後に削除する
 └── spec/                CUEとQuintの形式モデル
 ```
@@ -271,6 +272,7 @@ flippedCase: #MeasureVerdict & {
   quint typecheck <specパス>/<name>.qnt
   quint test      <specパス>/<name>.qnt
   bun <skill-dir>/tools/verify <specパス>   # 不変条件(頂層 val X: bool)を全件検証
+  bun <skill-dir>/tools/verify <specパス> --verbose # 検証詳細を端末にも表示
   ```
 
 ### 4. 投影を書く
@@ -345,7 +347,8 @@ bun <skill-dir>/tools/explain <specパス> --all-tests --output keaton/explanati
 exclusions}`(雛形 `about.cue`)を書くと、題名と概要(目的・対象範囲・除外範囲)が
 出力される。フェーズ0で合意した理解計画をここに記録する。また `tools/verify` は
 検証結果を `verify-result.json` に書き出し、`explain` が「検証」節として取り込む
-(不変条件名・成否・到達深度)。
+(不変条件名・成否・到達深度)。Quint・Apalacheの詳細は常に `verify.log` へ保存し、
+`--verbose` 指定時だけ同じ内容を端末にも表示する。
 
 個別のビュー:
 ```sh
@@ -463,6 +466,8 @@ CUEとQuintが検査するのは、モデルへ入れた前提に対する整合
   ちょうどいい深さはモデルごとに違う。到達した深度は必ず報告に残る。**浅い深度で
   タイムアウトしたら、対象が拡散している徴候** — スコープの絞り直しか、重い表現の
   抽象化(例: タイムスタンプを整数で表す)を利用者へ提案する
+- 通常の端末表示は検証対象・深度・成否・到達深度の要約に限定する。詳細は
+  `verify.log` で確認し、端末でも必要な場合だけ `--verbose` を使う
 - `quint test` は名前が `Test` で終わる `run` 定義だけ実行する(大文字小文字を区別)
 - `gen-quint-constants` はモジュール名のハイフンをサニタイズする
   (`todo-cli` → `TodoCliConstants`)

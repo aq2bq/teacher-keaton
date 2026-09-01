@@ -17,6 +17,7 @@ Rubyの `spec/`(RSpec)など各言語の慣習と衝突しないよう、専用�
     ├── explanation.md        explain が書き出す照合用の解説書
     ├── TODO.md               未解決の食い違いがある場合だけ作る根拠付き記録
     ├── verify-result.json    tools/verify が書き出す検証結果(任意。explainが取り込む)
+    ├── verify.log            Quint・Apalacheの検証詳細ログ(最新実行で上書き)
     ├── tmp/                  トレースと検査用コピー。通常処理後に削除する
     └── spec/
         ├── schema.cue        エンティティのスキーマ・enum・構造制約

@@ -25,13 +25,24 @@
 // 規約: 不変条件は頂層の `val <Name>: bool` として書く。
 // 補助の補題は def / pure def で書く(不変条件として検証されない)。
 //
-//   tools/verify <specパス> [--depths 4,8,12] [--timeout <秒>] [--max-steps <n>]
+//   tools/verify <specパス> [--depths 4,8,12] [--timeout <秒>] [--max-steps <n>] [--verbose]
 //
 // --max-steps は段階探索をせず単一深度で検証する(従来互換)。
+// Quint・Apalacheの詳細出力は常に verify.log へ保存し、--verbose 指定時だけ
+// 同じ内容を端末にも表示する。
 
-import { readdirSync, readFileSync, rmSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
+import {
+  closeSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+  writeSync,
+} from "node:fs";
 import { join, resolve } from "node:path";
-import { spawnSync } from "node:child_process";
 import { artifactRootForSpec } from "./lib/artifacts";
 import { resolveSpecPath } from "./lib/quint";
 
@@ -40,13 +51,15 @@ type Options = {
   depths: number[];
   timeoutSeconds: number;
   maxSteps?: number;
+  verbose: boolean;
 };
 
 function usage(): void {
-  console.error("使い方: tools/verify [<specパス>] [--depths 4,8,12] [--timeout <秒>] [--max-steps <n>]");
+  console.error("使い方: tools/verify [<specパス>] [--depths 4,8,12] [--timeout <秒>] [--max-steps <n>] [--verbose]");
   console.error("specパス省略時は keaton/spec を使います。");
   console.error("--depths: 段階探索の深度列(既定 4,8,12)。--timeout: 1段あたりの秒(既定 60)。");
   console.error("--max-steps: 段階探索をせず単一深度で検証する。");
+  console.error("--verbose: verify.log へ保存する詳細出力を端末にも表示する。");
 }
 
 function parseArguments(argv: string[]): Options | undefined {
@@ -60,6 +73,7 @@ function parseArguments(argv: string[]): Options | undefined {
     specPath: resolveSpecPath(specArg),
     depths: [4, 8, 12],
     timeoutSeconds: 60,
+    verbose: false,
   };
   for (; index < argv.length; index += 1) {
     const argument = argv[index];
@@ -82,6 +96,9 @@ function parseArguments(argv: string[]): Options | undefined {
         if (next === undefined) return undefined;
         options.maxSteps = Number(next);
         index += 1;
+        break;
+      case "--verbose":
+        options.verbose = true;
         break;
       default:
         return undefined;
@@ -116,6 +133,12 @@ function workspaceFor(specPath: string): string {
   return artifactRootForSpec(specPath) ?? specPath;
 }
 
+const workspace = workspaceFor(resolved);
+mkdirSync(workspace, { recursive: true });
+const logPath = join(workspace, "verify.log");
+const logFd = openSync(logPath, "w");
+writeSync(logFd, `tools/verify ${new Date().toISOString()}\n`);
+
 type StageResult =
   | { outcome: "pass" }
   | { outcome: "violation" }
@@ -139,32 +162,64 @@ function hasViolationTrace(dir: string, depthBudget = 4): boolean {
   return false;
 }
 
-function runVerify(file: string, invariants: string[], workspace: string, apalacheDir: string, depth: number): StageResult {
-  mkdirSync(workspace, { recursive: true });
-  const result = spawnSync(
-    "quint",
-    ["verify", file, "--invariants", ...invariants, "--max-steps", String(depth)],
-    {
-      cwd: workspace,
-      stdio: "inherit",
-      timeout: options.timeoutSeconds * 1000,
-    },
-  );
-  if (result.error !== undefined) {
-    console.error(`error: quint の起動に失敗しました: ${result.error.message}`);
-    return { outcome: "error", status: result.status ?? 1 };
+async function captureOutput(
+  stream: ReadableStream<Uint8Array>,
+  terminal: { write(chunk: Uint8Array): unknown },
+): Promise<void> {
+  const reader = stream.getReader();
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) return;
+    writeSync(logFd, value);
+    if (options.verbose) {
+      terminal.write(value);
+    }
   }
-  if (result.signal === "SIGTERM" || result.status === null) {
+}
+
+async function runVerify(
+  file: string,
+  invariants: string[],
+  apalacheDir: string,
+  depth: number,
+): Promise<StageResult> {
+  writeSync(logFd, `\n=== ${file} / depth ${depth} ===\n`);
+  let child: ReturnType<typeof Bun.spawn>;
+  try {
+    child = Bun.spawn(
+      ["quint", "verify", file, "--invariants", ...invariants, "--max-steps", String(depth)],
+      { cwd: workspace, stdout: "pipe", stderr: "pipe" },
+    );
+  } catch (error) {
+    const message = `quint の起動に失敗しました: ${(error as Error).message}`;
+    writeSync(logFd, `${message}\n`);
+    console.error(`error: ${message}`);
+    return { outcome: "error", status: 1 };
+  }
+
+  let timedOut = false;
+  const timeout = setTimeout(() => {
+    timedOut = true;
+    child.kill("SIGKILL");
+  }, options.timeoutSeconds * 1000);
+  const [exitCode] = await Promise.all([
+    child.exited,
+    captureOutput(child.stdout, process.stdout),
+    captureOutput(child.stderr, process.stderr),
+  ]);
+  clearTimeout(timeout);
+
+  if (timedOut) {
     return { outcome: "timeout" };
   }
-  if (result.status === 0) {
+  if (exitCode === 0) {
     return { outcome: "pass" };
   }
   // quint verify は反証発見時も非ゼロで終わる。作業場に残った
   // violation のトレースで区別がつく。
   return hasViolationTrace(apalacheDir)
     ? { outcome: "violation" }
-    : { outcome: "error", status: result.status };
+    : { outcome: "error", status: exitCode };
 }
 
 // 検証結果の機械可読な記録。explain が「検証」節として取り込み、
@@ -192,7 +247,6 @@ for (const file of qntFiles) {
     continue;
   }
 
-  const workspace = workspaceFor(resolved);
   const apalacheDir = join(workspace, "_apalache-out");
   rmSync(apalacheDir, { recursive: true, force: true });
   const depths = options.maxSteps !== undefined ? [options.maxSteps] : options.depths;
@@ -207,7 +261,7 @@ for (const file of qntFiles) {
   let stoppedAt: { depth: number; reason: "timeout" | "violation" | "error" } | undefined;
   for (const depth of depths) {
     console.log(`  深度 ${depth} を検証中...`);
-    const stage = runVerify(join(resolved, file), invariants, workspace, apalacheDir, depth);
+    const stage = await runVerify(join(resolved, file), invariants, apalacheDir, depth);
     if (stage.outcome === "pass") {
       lastPassDepth = depth;
       continue;
@@ -250,9 +304,14 @@ for (const file of qntFiles) {
   }
 }
 
+const resultPath = join(workspace, "verify-result.json");
 writeFileSync(
-  join(workspaceFor(resolved), "verify-result.json"),
+  resultPath,
   JSON.stringify({ verifiedAt: new Date().toISOString(), results: fileResults }, null, 2) + "\n",
 );
+closeSync(logFd);
+
+console.log(`詳細ログ: ${logPath}`);
+console.log(`検証結果(JSON): ${resultPath}`);
 
 process.exit(failed ? 1 : 0);

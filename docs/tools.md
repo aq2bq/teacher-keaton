@@ -173,7 +173,7 @@ bun tools/check-consistency <spec>
 ## verify — 不変条件の全件検証
 
 ```sh
-bun tools/verify <spec> [--depths 4,8,12] [--timeout <秒>] [--max-steps <n>]
+bun tools/verify <spec> [--depths 4,8,12] [--timeout <秒>] [--max-steps <n>] [--verbose]
 ```
 
 `quint verify` は `--invariant(s)` を渡さないとdeadlockしか検査しない。
@@ -191,6 +191,9 @@ bun tools/verify <spec> [--depths 4,8,12] [--timeout <秒>] [--max-steps <n>]
   (keaton/ が無いspecでは spec の中)に作られる。検証成功時は削除し、
   反証が見つかったときだけ保持して保存場所を報告する
 - 報告: `定義N件 / 指定N件 / 検証成功N件 (探索深度 N)`。失敗時は非ゼロ終了
+- **出力の分離**: 通常の端末表示は対象・深度・成否・到達深度の要約だけにする。
+  Quint・Apalacheの逐次出力は成功・失敗を問わず `verify.log` へ保存し、
+  最新実行で上書きする。`--verbose` を指定した場合だけ同じ詳細を端末にも表示する
 - 結果は `verify-result.json`(keaton/ の中、keaton/ が無いspecでは spec の中)
   へ機械可読形式で書き出され、`explain` が「検証」節として取り込む
 - `--max-steps <n>` は段階探索をせず単一深度で検証する(従来互換)
