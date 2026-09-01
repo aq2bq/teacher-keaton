@@ -100,6 +100,11 @@ teacher-keaton は長期β版です。セマンティック・リバースエン
 
 ### Changed
 
+- **スキル利用時の出力先を `keaton/` へ統一**：形式モデルだけでなく、
+  解説書を `keaton/explanation.md`、トレースと検査用コピーを `keaton/tmp/` に置く。
+  `explain --output` は実行場所の `keaton/` 配下だけを許し、
+  `keaton/spec` を使う場合は保存先を省略しても解説書を同じ場所へ書き出す。
+  `/tmp`、実行場所直下の `tmp/`、`keaton/` の間で成果物が分散する状態を解消する。
 - **スキル配布物の自己完結化** — `SKILL.md`・`templates/`・テストが、配布先に
   存在しないファイル(`examples/`・`docs/conventions.md`)を参照していた問題を解消。
   規約の核心(差分述語・constantsのモジュール命名・projectionの書き方)は

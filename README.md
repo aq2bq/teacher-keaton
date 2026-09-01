@@ -33,6 +33,10 @@ AIエージェントのスキルです。目的はコード生成ではなく、
 見つけた場合は、推測で形式モデルを通しません。
 根拠を `keaton/TODO.md` に残し、保留した範囲と必要な判断をユーザーへ報告します。
 
+スキルが作成または保持するファイルは、実行場所の `keaton/` に収めます。
+形式モデルは `keaton/spec/`、照合用の解説書は `keaton/explanation.md`、
+処理中だけ使うトレースと検査用コピーは `keaton/tmp/` に置きます。
+
 ## インストール
 
 [vercel-labs/skills](https://github.com/vercel-labs/skills) 経由で、主要エージェントの

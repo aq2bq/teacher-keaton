@@ -183,8 +183,9 @@ sequenceDiagram
 `quint verify` が違反を見つけたときの counterexample を可視化するのに使う。
 
 ```sh
-quint run apps/momotaro/spec/momotaro.qnt --max-steps 12 --n-traces 1 --out-itf /tmp/trace.itf.json
-tools/project apps/momotaro/spec --trace /tmp/trace.itf.json
+mkdir -p keaton/tmp
+quint run apps/momotaro/spec/momotaro.qnt --max-steps 12 --n-traces 1 --out-itf keaton/tmp/trace.itf.json
+tools/project apps/momotaro/spec --trace keaton/tmp/trace.itf.json
 ```
 
 **オプション**

@@ -1,7 +1,8 @@
 # ツールリファレンス
 
 `skills/teacher-keaton/tools/` にあるツールの一覧。すべて `<specパス>` を先頭引数に取る。
-**`<specパス>` を省略すると既定の `keaton/spec`** を使い、明示すればそちらを優先する。
+**`<specパス>` を省略すると既定の `keaton/spec`** を使う。
+既存モデルを明示すれば、そちらを入力として優先する。
 Bunで実行する: `bun <skill-dir>/tools/<tool> [<specパス>] [オプション]`。
 
 共通の前提: `<specパス>` はCUE(`*.cue`)とQuint(`*.qnt`)を含むディレクトリ。
@@ -23,19 +24,27 @@ bun tools/vet <spec>
 
 「正例N/N通過、負例N/N拒否」を報告し、期待と逆なら非ゼロ終了する。
 
+`keaton/spec` を使う通常経路では、検査用コピーを `keaton/tmp/` に作り、
+各用例の検査後に削除する。
+
 ## explain — 全部入り解説書
 
 用語表・概念マップ・振る舞いの図を一つのMarkdownにまとめて出力する。
 学習(オンボーディング)と分析の両方に使う。
 
 ```sh
+bun tools/explain                              # keaton/explanation.mdへ保存
 bun tools/explain <spec>                       # 観測(ランダムトレース)
 bun tools/explain <spec> --test <テスト名>      # 宣言(固定シナリオ)
 bun tools/explain <spec> --all-tests           # 全シナリオを束ねる
-bun tools/explain <spec> --output <パス>        # ファイルへ書く(成果物化)
+bun tools/explain <spec> --output keaton/explanation.md # 成果物ルートへ保存
 bun tools/explain <spec> --seed <値>           # 再現性固定
 bun tools/explain <spec> --max-steps <n>       # 探索ステップ数(既定12)
 ```
+
+`keaton/spec` を使う場合、`--output` を省略しても `keaton/explanation.md` へ保存する。
+`--output` で明示できる保存先も、実行場所の `keaton/` 配下に限る。
+`examples/` など開発用の明示specパスを使い、`--output` を省略した場合は標準出力へ出す。
 
 `--all-tests` は `.qnt` の `run <名前>Test` をすべて列挙し、テストごとの図を
 `## 振る舞い` の下に `### <テスト名>` として束ねる。複数シナリオの成果物を
@@ -108,6 +117,9 @@ bun tools/project <spec> --format <形式>        # 形式の指定
 向きを決められないため、評価時に失敗する(黙って何も出さない図にしない)。
 
 `--format` 省略時は `projection.cue` の `format` を使う。
+
+`keaton/spec` を使ってトレースを生成する場合、一時ファイルは `keaton/tmp/` に作り、
+投影後に削除する。
 
 ## gen-quint-constants — Quint定数の生成
 

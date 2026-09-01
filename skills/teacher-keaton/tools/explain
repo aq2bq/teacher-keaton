@@ -15,16 +15,27 @@
 //   - 状態遷移図   : projection.cue に transition イベントがあれば
 //
 // --all-tests は .qnt の `run <名前>Test` をすべて列挙し、シナリオごとの図を
-// 一つのMarkdownに束ねる(成果物化には --output でファイルへ書く)。
+// 一つのMarkdownに束ねる。keaton/spec を使う通常経路では、
+// keaton/explanation.md へ保存する。
 
-import { cleanupTrace, cueExport, findQuintInput, generateTrace, resolveSpecPath, tryCueExport } from "./lib/quint";
+import {
+  artifactRootForSpec,
+  cleanupTrace,
+  cueExport,
+  explanationPathForSpec,
+  findQuintInput,
+  generateTrace,
+  resolveArtifactOutputPath,
+  resolveSpecPath,
+  tryCueExport,
+} from "./lib/quint";
 import { detectEvents, makeProjectionContext, projectionVocabRefs, type ProjectionSpec, type Trace } from "./lib/projection";
 import { makeLabelResolver, render } from "./lib/render";
 import { renderGlossary, type Glossary } from "./lib/glossary";
 import { renderMeasures, type Measures } from "./lib/measures";
 import { generate as generateConceptMap, type Input as ConceptMapInput } from "./diagram-gen-bun/index";
 import { basename, dirname, resolve, join } from "node:path";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 
 type Options = {
   specPath: string;
@@ -38,6 +49,8 @@ type Options = {
 function usage(): void {
   console.error("使い方: tools/explain [<specパス>] [--test <テスト名> | --all-tests] [--seed <値>] [--max-steps <n>] [--output <パス>]");
   console.error("specパス省略時は keaton/spec を使います。");
+  console.error("keaton/spec の解説書は keaton/explanation.md へ保存します。");
+  console.error("--output の保存先は実行場所の keaton/ 配下に限ります。");
 }
 
 function parseArguments(argv: string[]): Options | undefined {
@@ -107,6 +120,15 @@ if (options === undefined) {
 }
 
 const resolvedSpecPath = resolve(options.specPath);
+let resolvedOutputPath: string | undefined;
+try {
+  resolvedOutputPath = options.output === undefined
+    ? explanationPathForSpec(resolvedSpecPath)
+    : resolveArtifactOutputPath(options.output);
+} catch (error) {
+  console.error(`error: ${(error as Error).message}`);
+  process.exit(1);
+}
 // 解説書の題名はプロジェクト名から取る。既定の <project>/keaton/spec のように
 // 直上が keaton なら、その一つ上をプロジェクト名とする。
 let appName = basename(dirname(resolvedSpecPath));
@@ -137,8 +159,7 @@ type VerifyFileResult = {
 };
 type VerifyResult = { verifiedAt: string; results: VerifyFileResult[] };
 function verifyResultPath(specPath: string): string {
-  const parent = dirname(specPath);
-  const base = basename(parent) === "keaton" ? parent : specPath;
+  const base = artifactRootForSpec(specPath) ?? specPath;
   return join(base, "verify-result.json");
 }
 let verifyResult: VerifyResult | undefined;
@@ -260,9 +281,10 @@ if (needsTrace && options.allTests) {
 }
 
 const document = sections.join("\n") + "\n";
-if (options.output !== undefined) {
-  await Bun.write(options.output, document);
-  console.error(`wrote ${options.output}`);
+if (resolvedOutputPath !== undefined) {
+  mkdirSync(dirname(resolvedOutputPath), { recursive: true });
+  await Bun.write(resolvedOutputPath, document);
+  console.error(`wrote ${resolvedOutputPath}`);
 } else {
   process.stdout.write(document);
 }

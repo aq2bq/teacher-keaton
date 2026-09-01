@@ -30,9 +30,9 @@
 // --max-steps は段階探索をせず単一深度で検証する(従来互換)。
 
 import { readdirSync, readFileSync, rmSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { join, resolve, dirname, basename } from "node:path";
+import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
-import { resolveSpecPath } from "./lib/quint";
+import { artifactRootForSpec, resolveSpecPath } from "./lib/quint";
 
 type Options = {
   specPath: string;
@@ -112,11 +112,7 @@ const INVARIANT_DECL = /^ {2}val (\w+)\s*:\s*bool\b/;
 // cwd を「成果物の置き場所である keaton/」(keaton/ が無いspecでは spec 自体)
 // にすれば、作業場は約束された領域の中に収まる。
 function workspaceFor(specPath: string): string {
-  const parent = dirname(specPath);
-  if (basename(parent) === "keaton") {
-    return parent;
-  }
-  return specPath;
+  return artifactRootForSpec(specPath) ?? specPath;
 }
 
 type StageResult =

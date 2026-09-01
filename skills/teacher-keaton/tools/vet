@@ -22,11 +22,10 @@
 //
 //   tools/vet <specパス>
 
-import { mkdtempSync, readdirSync, copyFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, copyFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
-import { resolveSpecPath } from "./lib/quint";
+import { resolveSpecPath, temporaryRootForSpec } from "./lib/quint";
 
 function vetDirectory(dir: string): { status: number; output: string } {
   const result = spawnSync("cue", ["vet", "-c", "."], {
@@ -49,7 +48,9 @@ console.log("ok: 構造 (cue vet)");
 // specの頂上直下 *.cue と用例ファイルを一時ディレクトリで合わせてvetする。
 // サブディレクトリ(positives/ 等)は別パッケージなので通常検証を汚染しない。
 function vetCase(casePath: string): { status: number; output: string } {
-  const directory = mkdtempSync(join(tmpdir(), "keaton-vet-"));
+  const temporaryRoot = temporaryRootForSpec(resolved);
+  mkdirSync(temporaryRoot, { recursive: true });
+  const directory = mkdtempSync(join(temporaryRoot, "keaton-vet-"));
   try {
     for (const file of readdirSync(resolved)) {
       if (file.endsWith(".cue")) {

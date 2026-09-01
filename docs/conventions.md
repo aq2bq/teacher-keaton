@@ -5,13 +5,19 @@ Rubyの `spec/`(RSpec)など各言語の慣習と衝突しないよう、専用�
 名前空間を使う。ツールは `<specパス>` を省略すると `keaton/spec` を使う。
 `examples/` に実例、`templates/` に雛形がある。
 
+対象プロジェクトのルートでスキルを実行し、作成または保持するファイルは
+実行場所の `keaton/` に収める。
+**成果物ルート**とは、この `keaton/` を指す。
+
 ## keaton/ の構成
 
 ```
 <プロジェクト>/
 └── keaton/
+    ├── explanation.md        explain が書き出す照合用の解説書
     ├── TODO.md               未解決の食い違いがある場合だけ作る根拠付き記録
     ├── verify-result.json    tools/verify が書き出す検証結果(任意。explainが取り込む)
+    ├── tmp/                  トレースと検査用コピー。通常処理後に削除する
     └── spec/
         ├── schema.cue        エンティティのスキーマ・enum・構造制約
         ├── <domain>.cue      ドメインの概念(状態やキャラクター等)。id/preferredName/definition/relations
@@ -27,7 +33,10 @@ Rubyの `spec/`(RSpec)など各言語の慣習と衝突しないよう、専用�
 
 `keaton/` をルートにするのは、将来spec以外の成果物を置く余地を残すため。
 `TODO.md` のパスは `<プロジェクト>/keaton/TODO.md` とする。
-明示した `<specパス>` を使う場合も、対象プロジェクトの `keaton/` へ置く。
+`explanation.md` のパスは `<プロジェクト>/keaton/explanation.md` とする。
+スキルが一時ファイルや作業メモを直接作る場合も `keaton/tmp/` を使い、
+`/tmp` や実行場所直下の `tmp/` には作らない。
+明示した `<specパス>` は、`examples/` など既存モデルを検証する開発用途に限る。
 
 ## 解説のメタデータ(about)
 
@@ -35,8 +44,10 @@ Rubyの `spec/`(RSpec)など各言語の慣習と衝突しないよう、専用�
 `explain` が題名と `## 概要` 節を出力し、解説書が単体で完結する。
 内容はフェーズ0で合意した**理解計画**と対応付ける(目的・範囲・深さの
 合意事項を、成果物側にも残す)。任意であり、無ければディレクトリ名が
-題名になる。`tools/verify` の結果は `keaton/verify-result.json` へ
-書き出され、`explain` が `## 検証` 節として取り込む。
+題名になる。
+`tools/verify` の結果は `keaton/verify-result.json` へ書き出され、
+`explain` が `## 検証` 節として取り込む。
+`keaton/spec` を使う `explain` は、解説書を `keaton/explanation.md` へ保存する。
 
 ## TODO.md の構造
 

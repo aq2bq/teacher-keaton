@@ -60,7 +60,28 @@ curl -fsSL https://bun.sh/install | bash
 macOS以外では、CUE・Quint・Bunを `PATH` から利用できるよう、ユーザーが好む方法で
 セットアップするよう依頼する。
 
-ツールはこのスキルの `tools/` ディレクトリにある。Bunで実行する:
+## 成果物の保存先
+
+スキルは対象プロジェクトのルートで実行し、作成または保持するファイルを
+実行場所の `keaton/` に収める。
+**成果物ルート**とは、この `keaton/` を指す。
+
+```
+keaton/
+├── explanation.md       照合に使う解説書
+├── TODO.md              未解決の食い違いがある場合だけ作る
+├── verify-result.json   不変条件の検証結果
+├── tmp/                 トレースと検査用コピー。通常処理後に削除する
+└── spec/                CUEとQuintの形式モデル
+```
+
+スキルが一時ファイルや作業メモを直接作る場合も `keaton/tmp/` を使う。
+`/tmp` や実行場所直下の `tmp/` に、スキルのファイルを作らない。
+明示specパスは既存モデルを検証する開発用途だけに使い、
+対象プロジェクトへ新規作成する形式モデルの保存先には使わない。
+
+ツールはこのスキルの `tools/` ディレクトリにある。
+Bunで実行する:
 
 ```sh
 bun <skill-dir>/tools/<tool> <specパス> [オプション]
@@ -69,7 +90,8 @@ bun <skill-dir>/tools/<tool> <specパス> [オプション]
 `<specパス>` は、一つのシステムのCUE(`*.cue`)とQuint(`*.qnt`)を含むディレクトリ。
 **既定は `keaton/spec`**(カレントディレクトリ基準)。Rubyの `spec/`(RSpec)など
 各言語の慣習と衝突しないよう、専用の `keaton/` 名前空間を使う。ツールは
-`<specパス>` を省略すると `keaton/spec` を使い、明示すればそちらを優先する。
+`<specパス>` を省略すると `keaton/spec` を使う。
+既存モデルを明示すれば、そちらを入力として優先する。
 
 ```sh
 bun <skill-dir>/tools/explain                    # 既定の keaton/spec を使う
@@ -308,9 +330,13 @@ Quintの文字列リテラルが既知のCUE idか、`.qnt` に日本語/生リ�
 ```sh
 bun <skill-dir>/tools/explain <specパス>            # 全部入り解説書(Markdown)
 bun <skill-dir>/tools/explain <specパス> --test <テスト名>  # 特定シナリオ
-bun <skill-dir>/tools/explain <specパス> --all-tests --output <パス>
-    # 全シナリオの図を束ねてファイルへ(成果物として残す場合)
+bun <skill-dir>/tools/explain <specパス> --all-tests --output keaton/explanation.md
+    # 全シナリオの図を束ね、成果物ルートの解説書へ保存する
 ```
+
+`keaton/spec` を使う場合、`--output` を省略しても `keaton/explanation.md` へ保存する。
+保存先を明示する場合も実行場所の `keaton/` 配下に限る。
+開発用の明示specパスを使い、`--output` を省略した場合は標準出力へ出す。
 
 解説書を単体で完結させるしかけ: specに任意の `about: {title, purpose, scope,
 exclusions}`(雛形 `about.cue`)を書くと、題名と概要(目的・対象範囲・除外範囲)が
@@ -414,7 +440,7 @@ CUEとQuintが検査するのは、モデルへ入れた前提に対する整合
 | ツール | 役割 |
 |---|---|
 | `vet` | CUEの構造検証(`cue vet -c` をcwd非依存で包む) |
-| `explain` | 全部入り解説書: 用語表+概念マップ+振る舞い図を一つのMarkdownで(`--all-tests` で全シナリオを束ね、`--output` でファイルへ) |
+| `explain` | 全部入り解説書: 用語表+概念マップ+振る舞い図を一つのMarkdownで(`keaton/spec` では `keaton/explanation.md` へ保存) |
 | `glossary` | CUEの `glossary` から用語表(Markdown表) |
 | `measures` | CUEの `measures` から測度表(範囲・極性・閾値・超過時の意味・根拠) |
 | `gen-mermaid-diagram` | CUEの語彙と関係から概念マップ(Mermaid `graph LR`) |

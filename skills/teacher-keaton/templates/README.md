@@ -30,7 +30,7 @@ templates/
    bun <skill>/tools/gen-quint-constants <spec>
    quint typecheck <spec>/<name>.qnt
    bun <skill>/tools/check-consistency <spec>
-   bun <skill>/tools/explain <spec>
+   bun <skill>/tools/explain <spec> --output keaton/explanation.md
    ```
 
 ## 2つの原型
