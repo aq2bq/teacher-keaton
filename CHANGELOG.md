@@ -100,6 +100,11 @@ teacher-keaton は長期β版です。セマンティック・リバースエン
 
 ### Changed
 
+- **測度・閾値のQuint使用判定を修正**：`check-consistency` が通常の文字列定数だけでなく、
+  測度の `quintVar` に対応する変数宣言と、閾値から生成された定数・述語の参照を
+  `quintExpected` の使用として数える。生成述語を使用していても「モデルの穴」と
+  警告され、意味のない文字列定数参照を追加する必要があった状態を解消する。
+  `constants.qnt` をimportしただけでは使用済みにしない。
 - **スキル利用時の出力先を `keaton/` へ統一**：形式モデルだけでなく、
   解説書を `keaton/explanation.md`、トレースと検査用コピーを `keaton/tmp/` に置く。
   `explain --output` は実行場所の `keaton/` 配下だけを許し、

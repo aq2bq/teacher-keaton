@@ -40,7 +40,56 @@ test("測度つきspecは、構造検証と整合検査を通る", async () => {
 
   const consistency = await run("check-consistency", fixture);
   expect(consistency.exitCode).toBe(0);
+  expect(consistency.stdout).toContain("2 used in Quint");
   expect(consistency.stdout).toContain("1 measures");
+  expect(consistency.stderr).not.toContain("モデルの穴");
+});
+
+test("閾値の生成記号は参照したときだけ使用済みになり、importだけでは数えない", async () => {
+  const { specPath, cleanup } = copyFixture();
+  try {
+    edit(
+      join(specPath, "model.qnt"),
+      "alerted' = thresholdAnnoyanceHighIsWorseSide(annoyance + 1)",
+      "alerted' = alerted",
+    );
+    edit(
+      join(specPath, "model.qnt"),
+      "alerted' = thresholdAnnoyanceHighIsWorseSide(annoyance - 1)",
+      "alerted' = alerted",
+    );
+    edit(
+      join(specPath, "model.qnt"),
+      "alerted == thresholdAnnoyanceHighIsWorseSide(annoyance)",
+      "alerted == alerted",
+    );
+
+    const result = await run("check-consistency", specPath);
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("1 used in Quint");
+    expect(result.stderr).toContain(
+      "threshold-annoyance-high はquintExpectedに挙がっていますがQuintのモデルで使用されていません",
+    );
+    expect(result.stderr).not.toContain(
+      "measure-annoyance はquintExpectedに挙がっていますがQuintのモデルで使用されていません",
+    );
+  } finally {
+    cleanup();
+  }
+});
+
+test("測度のquintVarに対応する変数がなければ使用済みにせず失敗する", async () => {
+  const { specPath, cleanup } = copyFixture();
+  try {
+    edit(join(specPath, "model.qnt"), "  var annoyance: int\n", "");
+    const result = await run("check-consistency", specPath);
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain(
+      '測度 "measure-annoyance" の quintVar "annoyance" はQuintで宣言されていません',
+    );
+  } finally {
+    cleanup();
+  }
 });
 
 test("測度表は、範囲だけでなく極性と閾値の意味を出す", async () => {

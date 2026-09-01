@@ -78,6 +78,22 @@ export function toQuintName(id: string): string {
     .join("");
 }
 
+export type ThresholdQuintNames = {
+  at: string;
+  isWorseSide: string;
+  isBetterSide: string;
+};
+
+// 閾値から生成するQuint記号名の決定を、生成側と使用検査側で共有する。
+export function thresholdQuintNames(thresholdId: string): ThresholdQuintNames {
+  const name = toQuintName(thresholdId);
+  return {
+    at: `${name}At`,
+    isWorseSide: `${name}IsWorseSide`,
+    isBetterSide: `${name}IsBetterSide`,
+  };
+}
+
 // 測度から、閾値の定数と「どちら側を検出するか」を名前に持つ述語を生成する。
 // 比較の向きはCUEの極性から導出されるので、振る舞いモデルは v >= 3 のような
 // 生の比較を書かずに済み、比較が悪い側の検出か良い側の検出かが常に名前に残る。
@@ -99,7 +115,6 @@ function measureLines(measures: Measures): string[] {
       continue;
     }
     for (const threshold of thresholds) {
-      const name = toQuintName(threshold.id);
       if (!Number.isInteger(threshold.at)) {
         lines.push(
           `  // ${threshold.preferredName}: 閾値 ${threshold.at} は整数でないため述語を生成しません` +
@@ -112,13 +127,14 @@ function measureLines(measures: Measures): string[] {
       if (comparison === undefined) {
         continue;
       }
+      const names = thresholdQuintNames(threshold.id);
       lines.push(`  /// ${renderThreshold(measure, threshold)}`);
-      lines.push(`  pure val ${name}At: int = ${threshold.at}`);
+      lines.push(`  pure val ${names.at}: int = ${threshold.at}`);
       lines.push(
-        `  pure def ${name}IsWorseSide(value: int): bool = value ${comparison} ${name}At`,
+        `  pure def ${names.isWorseSide}(value: int): bool = value ${comparison} ${names.at}`,
       );
       lines.push(
-        `  pure def ${name}IsBetterSide(value: int): bool = not(${name}IsWorseSide(value))`,
+        `  pure def ${names.isBetterSide}(value: int): bool = not(${names.isWorseSide}(value))`,
       );
     }
   }

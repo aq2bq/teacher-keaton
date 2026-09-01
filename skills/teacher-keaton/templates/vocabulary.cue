@@ -74,6 +74,8 @@ knownIds: [for _, x in <concepts> {x.id}]
 // Quintの振る舞いモデルに現れるべき概念(行動の核)のid一覧。
 // check-consistency は、ここに挙がった概念がQuintで未使用の場合だけ警告する。
 // 構造専用(用語表・概念マップのみ)や投影専用(イベント等)の概念は挙げなくてよい。
+// 測度は quintVar に対応する変数宣言、閾値は生成された定数・述語の参照で使用済みになる。
+// constants.qnt をimportしただけでは使用済みにならない。
 quintExpected: [
 	// "<行動の核となる概念のid>"
 ]

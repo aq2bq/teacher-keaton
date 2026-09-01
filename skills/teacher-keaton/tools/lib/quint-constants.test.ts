@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { generateConstants } from "./quint-constants";
+import { generateConstants, thresholdQuintNames } from "./quint-constants";
 import type { Measures } from "./measures";
 
 const ids = ["calm", "measure-annoyance", "threshold-annoyance-high"];
@@ -25,6 +25,14 @@ const measures: Measures = {
 };
 
 describe("generateConstants", () => {
+  test("閾値の生成名を使用検査と共有する", () => {
+    expect(thresholdQuintNames("threshold-annoyance-high")).toEqual({
+      at: "thresholdAnnoyanceHighAt",
+      isWorseSide: "thresholdAnnoyanceHighIsWorseSide",
+      isBetterSide: "thresholdAnnoyanceHighIsBetterSide",
+    });
+  });
+
   test("測度が無ければ、これまでどおりidの定数だけを出す", () => {
     const output = generateConstants(ids, "XConstants");
     expect(output).toContain('pure val calm: str = "calm"');

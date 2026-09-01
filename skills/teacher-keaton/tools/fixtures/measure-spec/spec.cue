@@ -155,6 +155,6 @@ knownIds: list.Concat([
 	list.Concat([for _, m in measures {[for _, t in m.thresholds {t.id}]}]),
 ])
 
-quintExpected: []
+quintExpected: ["measure-annoyance", "threshold-annoyance-high"]
 
 relations: []

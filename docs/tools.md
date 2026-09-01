@@ -163,7 +163,12 @@ bun tools/check-consistency <spec>
      閾値を持つのに極性が `neutral`
 7. 警告: `vocabulary.cue` の `quintExpected` に挙がっているがQuintで未使用の
    概念(モデルの穴)。リストに無い概念は構造・投影専用とみなし警告しない
-   (`quintExpected` の未知idは失敗)
+   (`quintExpected` の未知idは失敗)。使用判定は次の対応を使い、importしただけでは
+   使用済みにしない:
+   - 通常概念: `constants.qnt` の生成文字列定数をモデル本体が参照
+   - 測度: `quintVar` に対応するQuint変数をモデル本体が宣言
+   - 閾値: 生成された `<閾値>At` / `<閾値>IsWorseSide` /
+     `<閾値>IsBetterSide` のいずれかをモデル本体が参照
 
 ## verify — 不変条件の全件検証
 
