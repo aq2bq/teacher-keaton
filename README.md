@@ -40,6 +40,9 @@ AIエージェントのスキルです。目的はコード生成ではなく、
 検証の詳細は `keaton/verify.log`、処理中だけ使うトレースと検査用コピーは
 `keaton/tmp/` に置きます。
 
+大きな概念マップは、`explain --focus <用語または概念id> --focus-depth <n>` で
+中心概念から指定した辺数以内へ絞れます。オプション省略時は全体図を出します。
+
 ## インストール
 
 [vercel-labs/skills](https://github.com/vercel-labs/skills) 経由で、主要エージェントの

@@ -6,7 +6,66 @@ import { existsSync } from "node:fs";
 import { resolveSpecPath } from "./lib/quint";
 import { projectionVocabRefs, type ProjectionSpec } from "./lib/projection.ts";
 
-const resolvedSpecPath = resolve(resolveSpecPath(Bun.argv[2]));
+type Options = {
+  specArg?: string;
+  focus?: string;
+  focusDepth?: number;
+};
+
+function usage(): void {
+  console.error(
+    "使い方: tools/gen-mermaid-diagram [<specパス>] " +
+      "[--focus <用語または概念id>] [--focus-depth <非負整数>]",
+  );
+  console.error("specパス省略時は keaton/spec を使います。");
+  console.error("--focus-depth の既定は1です。--focus が無い場合は指定できません。");
+}
+
+function parseArguments(argv: string[]): Options | undefined {
+  let index = 0;
+  const options: Options = {};
+  if (argv.length > 0 && !argv[0].startsWith("--")) {
+    options.specArg = argv[0];
+    index = 1;
+  }
+  for (; index < argv.length; index += 1) {
+    const argument = argv[index];
+    const next = argv[index + 1];
+    switch (argument) {
+      case "--focus":
+        if (next === undefined || next.startsWith("--")) return undefined;
+        options.focus = next;
+        index += 1;
+        break;
+      case "--focus-depth": {
+        if (next === undefined) return undefined;
+        const depth = Number(next);
+        if (!Number.isInteger(depth) || depth < 0) return undefined;
+        options.focusDepth = depth;
+        index += 1;
+        break;
+      }
+      default:
+        return undefined;
+    }
+  }
+  if (options.focus === undefined && options.focusDepth !== undefined) {
+    console.error("error: --focus-depth には --focus が必要です");
+    return undefined;
+  }
+  if (options.focus !== undefined && options.focusDepth === undefined) {
+    options.focusDepth = 1;
+  }
+  return options;
+}
+
+const options = parseArguments(Bun.argv.slice(2));
+if (options === undefined) {
+  usage();
+  process.exit(1);
+}
+
+const resolvedSpecPath = resolve(resolveSpecPath(options.specArg));
 
 async function cueExport<T>(expression: "vocabulary" | "relations" | "projection"): Promise<T> {
   const child = Bun.spawn(["cue", "export", ".", "-e", expression], {
@@ -35,4 +94,16 @@ if (existsSync(join(resolvedSpecPath, "projection.cue"))) {
   projectionRefs = projectionVocabRefs(projection);
 }
 
-process.stdout.write(generate({ vocabulary, relations, projectionRefs }));
+try {
+  process.stdout.write(generate({
+    vocabulary,
+    relations,
+    projectionRefs,
+    focus: options.focus === undefined
+      ? undefined
+      : { concept: options.focus, depth: options.focusDepth ?? 1 },
+  }));
+} catch (error) {
+  console.error(`error: ${(error as Error).message}`);
+  process.exit(1);
+}

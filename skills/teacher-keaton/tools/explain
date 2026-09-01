@@ -5,6 +5,7 @@
 //
 //   tools/explain <specパス> [--test <テスト名> | --all-tests] [--seed <値>]
 //                 [--max-steps <n>] [--output <パス>]
+//                 [--focus <用語または概念id>] [--focus-depth <非負整数>]
 //
 // 各ビューはすべてCUEの語彙とQuintの振る舞いから派生するため、用語と構造の
 // 整合性が構造的に保証される。ビューごとに適用可否を検出し、该系统統に合うものだけ出す:
@@ -46,13 +47,20 @@ type Options = {
   output?: string;
   seed?: string;
   maxSteps: number;
+  focus?: string;
+  focusDepth?: number;
 };
 
 function usage(): void {
-  console.error("使い方: tools/explain [<specパス>] [--test <テスト名> | --all-tests] [--seed <値>] [--max-steps <n>] [--output <パス>]");
+  console.error(
+    "使い方: tools/explain [<specパス>] " +
+      "[--test <テスト名> | --all-tests] [--seed <値>] [--max-steps <n>] " +
+      "[--output <パス>] [--focus <用語または概念id>] [--focus-depth <非負整数>]",
+  );
   console.error("specパス省略時は keaton/spec を使います。");
   console.error("keaton/spec の解説書は keaton/explanation.md へ保存します。");
   console.error("--output の保存先は実行場所の keaton/ 配下に限ります。");
+  console.error("--focus-depth の既定は1です。--focus が無い場合は指定できません。");
 }
 
 function parseArguments(argv: string[]): Options | undefined {
@@ -90,6 +98,19 @@ function parseArguments(argv: string[]): Options | undefined {
         options.maxSteps = Number(next);
         index += 1;
         break;
+      case "--focus":
+        if (next === undefined || next.startsWith("--")) return undefined;
+        options.focus = next;
+        index += 1;
+        break;
+      case "--focus-depth": {
+        if (next === undefined) return undefined;
+        const depth = Number(next);
+        if (!Number.isInteger(depth) || depth < 0) return undefined;
+        options.focusDepth = depth;
+        index += 1;
+        break;
+      }
       default:
         return undefined;
     }
@@ -97,6 +118,13 @@ function parseArguments(argv: string[]): Options | undefined {
   if (options.testName !== undefined && options.allTests) {
     console.error("error: --test と --all-tests は同時に指定できません");
     return undefined;
+  }
+  if (options.focus === undefined && options.focusDepth !== undefined) {
+    console.error("error: --focus-depth には --focus が必要です");
+    return undefined;
+  }
+  if (options.focus !== undefined && options.focusDepth === undefined) {
+    options.focusDepth = 1;
   }
   return options;
 }
@@ -176,7 +204,7 @@ if (existsSync(verifyResultPath(resolvedSpecPath))) {
 // 適用できるビューを検出する。
 const hasGlossary = Object.keys(glossary).length > 0;
 const hasMeasures = measures !== undefined && Object.keys(measures).length > 0;
-const hasConceptMap = relations.length > 0;
+const hasConceptMap = relations.length > 0 || options.focus !== undefined;
 const hasSequence = projection.events.some((event) => event.message !== undefined);
 const hasState = projection.events.some((event) => event.transition !== undefined);
 const needsTrace = hasSequence || hasState;
@@ -241,10 +269,21 @@ if (hasMeasures && measures !== undefined) {
 }
 
 if (hasConceptMap) {
-  sections.push(
-    "## 概念マップ",
-    fence(generateConceptMap({ vocabulary, relations, projectionRefs: projectionVocabRefs(projection) })),
-  );
+  let conceptMap: string;
+  try {
+    conceptMap = generateConceptMap({
+      vocabulary,
+      relations,
+      projectionRefs: projectionVocabRefs(projection),
+      focus: options.focus === undefined
+        ? undefined
+        : { concept: options.focus, depth: options.focusDepth ?? 1 },
+    });
+  } catch (error) {
+    console.error(`error: ${(error as Error).message}`);
+    process.exit(1);
+  }
+  sections.push("## 概念マップ", fence(conceptMap));
 }
 
 if (needsTrace && options.allTests) {

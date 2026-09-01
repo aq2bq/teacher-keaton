@@ -40,6 +40,7 @@ bun tools/explain <spec> --all-tests           # 全シナリオを束ねる
 bun tools/explain <spec> --output keaton/explanation.md # 成果物ルートへ保存
 bun tools/explain <spec> --seed <値>           # 再現性固定
 bun tools/explain <spec> --max-steps <n>       # 探索ステップ数(既定12)
+bun tools/explain <spec> --focus <用語または概念id> [--focus-depth <n>]
 ```
 
 `keaton/spec` を使う場合、`--output` を省略しても `keaton/explanation.md` へ保存する。
@@ -49,6 +50,11 @@ bun tools/explain <spec> --max-steps <n>       # 探索ステップ数(既定12)
 `--all-tests` は `.qnt` の `run <名前>Test` をすべて列挙し、テストごとの図を
 `## 振る舞い` の下に `### <テスト名>` として束ねる。複数シナリオの成果物を
 一度に作る場合に使う(`--test` とは同時指定できない)。
+
+`--focus` は解説書の概念マップだけを中心概念の近傍へ絞る。用語表・測度表・
+振る舞いの図は全体のまま残す。`--focus-depth` の既定は1で、0は中心概念だけを描く。
+関係は向きを問わず一辺として数える。用語と安定idの両方を指定できるが、
+改名後も同じ実行を再現する必要がある場合は安定idを使う。
 
 specに `about: {title, purpose, scope, exclusions}` があれば、題名と
 `## 概要`(目的・対象範囲・除外範囲)を出力する(無ければディレクトリ名が題名)。
@@ -87,13 +93,18 @@ CUEの `vocabulary` と `relations` からMermaidの `graph LR`(概念マップ)
 構造のビュー。トレースは不要。
 
 ```sh
-bun tools/gen-mermaid-diagram <spec>
+bun tools/gen-mermaid-diagram <spec> [--focus <用語または概念id>] [--focus-depth <n>]
 ```
 
 ノードの選定: 関係を持つ概念と、投影も関係も参照しない孤立概念を描く。
 **投影が参照する孤立概念(イベント等)は除外する** — それらの意味は振る舞いの図が
 担うため、構造の図ではノイズになる。投影も関係も無い孤立概念は「関係の
 書き漏れ」のシグナルとして、あえて残す。
+
+`--focus` を指定すると、入向き・出向きの両方をたどり、中心概念から
+`--focus-depth` 辺以内の概念と、それらを結ぶ関係だけを描く。近傍深度の既定は1。
+0は中心概念だけを描く。`--focus-depth` だけの指定、未知または曖昧な概念、
+負の近傍深度はエラーになる。オプション省略時は従来どおり全体図を描く。
 
 ## project — 振る舞いの図
 

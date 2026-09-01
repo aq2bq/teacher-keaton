@@ -13,3 +13,11 @@ relations: [
 	{from: "order", to: "product", label: "含む"},
 	{from: "warehouse", to: "product", label: "保管する"},
 ]
+
+glossary: {
+	"注文": {id: "order", kind: "entity", definition: "商品を含む取引単位。"}
+	"商品": {id: "product", kind: "entity", definition: "注文に含まれる品目。"}
+	"倉庫": {id: "warehouse", kind: "entity", definition: "商品を保管する場所。"}
+}
+
+projection: {events: []}

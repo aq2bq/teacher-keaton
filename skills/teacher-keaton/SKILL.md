@@ -337,11 +337,18 @@ bun <skill-dir>/tools/explain <specパス>            # 全部入り解説書(Ma
 bun <skill-dir>/tools/explain <specパス> --test <テスト名>  # 特定シナリオ
 bun <skill-dir>/tools/explain <specパス> --all-tests --output keaton/explanation.md
     # 全シナリオの図を束ね、成果物ルートの解説書へ保存する
+bun <skill-dir>/tools/explain <specパス> --focus <用語または概念id> --focus-depth <n>
+    # 概念マップだけを中心概念の近傍へ絞る
 ```
 
 `keaton/spec` を使う場合、`--output` を省略しても `keaton/explanation.md` へ保存する。
 保存先を明示する場合も実行場所の `keaton/` 配下に限る。
 開発用の明示specパスを使い、`--output` を省略した場合は標準出力へ出す。
+全体の概念マップから問いに必要な関係を追いにくい場合は、`--focus` で中心概念を、
+`--focus-depth` で関係を何辺先まで含めるかを指定する。近傍深度の既定は1で、
+0は中心概念だけを描く。関係は入向き・出向きの両方をたどる。用語と安定idの
+どちらも指定できるが、改名後も同じ実行を再現する必要がある場合は安定idを使う。
+この指定で絞るのは概念マップだけであり、用語表・測度表・振る舞いの図は全体を残す。
 
 解説書を単体で完結させるしかけ: specに任意の `about: {title, purpose, scope,
 exclusions}`(雛形 `about.cue`)を書くと、題名と概要(目的・対象範囲・除外範囲)が
@@ -354,7 +361,8 @@ exclusions}`(雛形 `about.cue`)を書くと、題名と概要(目的・対象�
 個別のビュー:
 ```sh
 bun <skill-dir>/tools/glossary            <specパス>   # 用語表(Markdown表)
-bun <skill-dir>/tools/gen-mermaid-diagram <specパス>   # 概念マップ(Mermaid graph)
+bun <skill-dir>/tools/gen-mermaid-diagram <specパス> [--focus <用語または概念id>] [--focus-depth <n>]
+    # 概念マップ(Mermaid graph)。オプション省略時は全体図
 bun <skill-dir>/tools/project             <specパス>   # 振る舞い図(シーケンス/状態/json)
 ```
 
