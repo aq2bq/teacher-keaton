@@ -20,7 +20,7 @@ AIエージェントのスキルです。目的はコード生成ではなく、
    |-- Quint : 状態・遷移・不変条件(時間とともに変化する振る舞い)
    |  投影
    v
-ビュー: 用語表 / 概念マップ / シーケンス図 / 状態遷移図
+ビュー: 用語表 / 測度表 / 概念マップ / シーケンス図 / 状態遷移図
    |  照合
    v
 人間のメンタルモデル
@@ -79,6 +79,7 @@ bun skills/teacher-keaton/tools/explain examples/todo-cli/spec --test reopenTask
 
 # 個別のビュー
 bun skills/teacher-keaton/tools/glossary            examples/momotaro/spec
+bun skills/teacher-keaton/tools/measures            examples/momotaro/spec
 bun skills/teacher-keaton/tools/gen-mermaid-diagram examples/momotaro/spec
 bun skills/teacher-keaton/tools/project             examples/momotaro/spec --test fullStoryTest
 ```
@@ -109,7 +110,8 @@ teacher-keaton/
 | `examples/momotaro` | ナラティブ(参加者間の相互作用) | 用語表+概念マップ+**シーケンス図** |
 | `examples/todo-cli` | 状態機械(レコードの状態変化) | 用語表+概念マップ+**状態遷移図** |
 
-ビューは**適応型**です。システムの構造に合うものだけを出し、4つを強制しません。
+ビューは**適応型**です。システムの構造に合うものだけを出し、すべてを強制しません。
+数値尺度を宣言したシステムでは、**測度表**(範囲・極性・閾値・超過時の意味)も出ます。
 
 ## ドキュメント
 

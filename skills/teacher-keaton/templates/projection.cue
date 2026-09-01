@@ -24,6 +24,27 @@ projection: {
 			transition: {from: "<stateA>", to: "<stateB>"}
 		},
 
+		// ── 測度(数値尺度)の例 ───────────────────────────────────
+		// 増加・減少ではなく「悪化・改善」で書く。増加が悪化かどうかは
+		// CUEの極性(measures.cue)から解決されるため、投影に向きを書かない。
+		// 極性を直せば図が自動で追随する。
+		// {
+		// 	event: "<kind>-<event>"
+		// 	when: [{kind: "measureWorsens", var: "<quint変数名>", measure: "measure-<key>"}]
+		// 	transition: {from: "<stateA>", to: "<stateB>"}
+		// },
+		// 閾値を跨いだ瞬間(良い側→悪い側)を事象として描く場合。
+		// {
+		// 	event: "<kind>-<event>"
+		// 	when: [{
+		// 		kind:      "measureEntersWorseSide"
+		// 		var:       "<quint変数名>"
+		// 		measure:   "measure-<key>"
+		// 		threshold: "threshold-<key>-<name>"
+		// 	}]
+		// 	transition: {from: "<stateA>", to: "<stateB>"}
+		// },
+
 		// ── ナラティブの例(シーケンス図) ─────────────────────────
 		// 集合に要素が加わり、かつ整数が減ったら、メッセージとみなす。
 		// bind で捕まえた値を "$<bind>" で参照する。
@@ -45,6 +66,10 @@ projection: {
 //   intDecreases    整数が減った / intIncreases 整数が増えた
 //   boolBecomes     ブールが指定値に変わった
 //   sequenceAppends リスト(観測ログ)に要素が加わった (bind: 加わった要素)
+//   measureWorsens          測度が悪化した(向きは極性から解決)
+//   measureImproves         測度が改善した(向きは極性から解決)
+//   measureEntersWorseSide  測度が閾値の良い側から悪い側へ入った
+//   measureEntersBetterSide 測度が閾値の悪い側から良い側へ戻った
 //                   value で特定のイベント定数に絞り込み可。
 //                   拒否のように状態を変えない事象は、観測専用リスト変数への
 //                   記録としてモデル化し、この述語で投影する。

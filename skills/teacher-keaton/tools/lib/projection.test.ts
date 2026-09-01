@@ -2,10 +2,12 @@ import { describe, expect, test } from "bun:test";
 import {
   detectEvents,
   expandEndpoints,
+  makeProjectionContext,
   validateProjectionVars,
   type ProjectionSpec,
   type Trace,
 } from "./projection";
+import type { Measures } from "./measures";
 import { makeLabelResolver, render } from "./render";
 
 // ITFの包み({"#set":...} や {"#bigint":...})を模した状態を作る補助。
@@ -299,5 +301,104 @@ describe("render", () => {
     expect(() => render("stateDiagram", detectEvents(trace, spec), resolve)).toThrow(
       "unknown id: event-unknown",
     );
+  });
+});
+
+// 測度の投影: 増加が悪化かどうかはCUEの極性から解決される。
+// 投影仕様に向きを書かないので、極性を直せば図が自動で追随する。
+describe("測度の述語", () => {
+  const measures: Measures = {
+    annoyance: {
+      id: "measure-annoyance",
+      preferredName: "気になる度",
+      definition: "困りごとの強さ。",
+      range: { min: 0, max: 10 },
+      polarity: "lowerIsBetter",
+      quintVar: "annoyance",
+      thresholds: [
+        {
+          id: "threshold-annoyance-high",
+          preferredName: "要対応の閾値",
+          at: 3,
+          inclusive: true,
+          meaning: "要対応として扱う",
+        },
+      ],
+    },
+  };
+  const context = makeProjectionContext(measures);
+
+  const worsensSpec: ProjectionSpec = {
+    events: [
+      {
+        event: "event-worsen",
+        when: [{ kind: "measureWorsens", var: "annoyance", measure: "measure-annoyance" }],
+        transition: { from: "calm", to: "calm" },
+      },
+    ],
+  };
+
+  test("小さいほど良い尺度では、増加が悪化になる", () => {
+    const trace: Trace = { states: [{ annoyance: int(1) }, { annoyance: int(2) }] };
+    expect(detectEvents(trace, worsensSpec, context).length).toBe(1);
+  });
+
+  test("同じ増加でも、極性が逆なら悪化にならない", () => {
+    const flipped = makeProjectionContext({
+      annoyance: { ...measures.annoyance, polarity: "higherIsBetter" },
+    });
+    const trace: Trace = { states: [{ annoyance: int(1) }, { annoyance: int(2) }] };
+    expect(detectEvents(trace, worsensSpec, flipped).length).toBe(0);
+  });
+
+  test("改善は悪化の逆向きとして検出される", () => {
+    const spec: ProjectionSpec = {
+      events: [
+        {
+          event: "event-improve",
+          when: [{ kind: "measureImproves", var: "annoyance", measure: "measure-annoyance" }],
+          transition: { from: "alert", to: "calm" },
+        },
+      ],
+    };
+    const trace: Trace = { states: [{ annoyance: int(4) }, { annoyance: int(2) }] };
+    expect(detectEvents(trace, spec, context).length).toBe(1);
+  });
+
+  test("閾値の跨ぎは、跨いだ遷移でだけ成立する", () => {
+    const spec: ProjectionSpec = {
+      events: [
+        {
+          event: "event-enter-alert",
+          when: [{
+            kind: "measureEntersWorseSide",
+            var: "annoyance",
+            measure: "measure-annoyance",
+            threshold: "threshold-annoyance-high",
+          }],
+          transition: { from: "calm", to: "alert" },
+        },
+      ],
+    };
+    // 1→2 は悪い側へ入らない。2→3 は閾値(3以上が悪い側)を跨ぐ。
+    const trace: Trace = {
+      states: [{ annoyance: int(1) }, { annoyance: int(2) }, { annoyance: int(3) }],
+    };
+    const steps = detectEvents(trace, spec, context);
+    expect(steps.length).toBe(1);
+    expect(steps[0][0].event).toBe("event-enter-alert");
+  });
+
+  test("極性が決まらない測度は、悪化と改善を決められないので失敗する", () => {
+    const unresolved = makeProjectionContext({
+      annoyance: { ...measures.annoyance, polarity: "unresolved" },
+    });
+    const trace: Trace = { states: [{ annoyance: int(1) }, { annoyance: int(2) }] };
+    expect(() => detectEvents(trace, worsensSpec, unresolved)).toThrow(/極性/);
+  });
+
+  test("測度が未宣言なら黙って何も出さず、失敗する", () => {
+    const trace: Trace = { states: [{ annoyance: int(1) }, { annoyance: int(2) }] };
+    expect(() => detectEvents(trace, worsensSpec)).toThrow(/measures/);
   });
 });

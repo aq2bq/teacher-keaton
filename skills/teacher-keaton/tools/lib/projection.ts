@@ -9,6 +9,15 @@
 
 // ---------- 投影仕様の型 ----------
 
+import {
+  findThreshold,
+  indexMeasures,
+  isWorseSide,
+  worseSide,
+  type Measure,
+  type Measures,
+} from "./measures";
+
 // 状態差分を検出する最小の述語。必要になったら拡張する。
 export type DiffPredicate =
   | { kind: "setGains"; var: string; bind?: string }
@@ -21,7 +30,15 @@ export type DiffPredicate =
   // 拒否・重複拒否のようにドメイン状態を変えない事象は、観測専用の
   // リスト変数への記録としてモデル化し、この述語で投影する。
   // value を指定すると、追加された要素がその値を含む場合だけ成立する。
-  | { kind: "sequenceAppends"; var: string; value?: string; bind?: string };
+  | { kind: "sequenceAppends"; var: string; value?: string; bind?: string }
+  // 測度(数値尺度)の意味づけ。増減ではなく「悪化/改善」で書く。
+  // 増加が悪化なのか改善なのかはCUEの極性から解決するため、投影仕様には
+  // 向きを書かない(極性を直せば図が自動で追随する)。
+  | { kind: "measureWorsens"; var: string; measure: string }
+  | { kind: "measureImproves"; var: string; measure: string }
+  // 閾値の跨ぎ。良い側から悪い側へ入った/戻ったときに成立する。
+  | { kind: "measureEntersWorseSide"; var: string; measure: string; threshold: string }
+  | { kind: "measureEntersBetterSide"; var: string; measure: string; threshold: string };
 
 // from/to は「stable id のリテラル」または「"$<bind>" のバインディング参照」。
 // ラベルは持たない: 表示名はイベントのstable idから語彙(vocabulary)が解決する。
@@ -90,10 +107,42 @@ function asList(state: TraceState, name: string): string[] {
 
 type PredicateResult = { holds: boolean; bindings: Record<string, string[]> };
 
+// 投影の評価に必要な、仕様の外側の文脈。
+// 現状は測度の極性・閾値だけ(CUEの measures から作る)。
+// エンジンはドメインの語を持たず、意味づけの原本はCUE側にあるという
+// 設計を保つため、値はすべて呼び出し側から渡す。
+export type ProjectionContext = { measures?: Map<string, Measure> };
+
+function lookupMeasure(
+  context: ProjectionContext,
+  measureId: string,
+): Measure {
+  const measure = context.measures?.get(measureId);
+  if (measure === undefined) {
+    throw new Error(
+      `projection: 測度 "${measureId}" がCUEの measures にありません`,
+    );
+  }
+  return measure;
+}
+
+// 悪化の向き(増加か減少か)を極性から解決する。
+function worsensBy(measure: Measure): "increase" | "decrease" {
+  const side = worseSide(measure.polarity);
+  if (side === undefined) {
+    throw new Error(
+      `projection: 測度 "${measure.id}" の極性は ${measure.polarity} なので、` +
+        "悪化と改善を決められません(極性を確定させてください)",
+    );
+  }
+  return side === "high" ? "increase" : "decrease";
+}
+
 function evaluatePredicate(
   predicate: DiffPredicate,
   prev: TraceState,
   curr: TraceState,
+  context: ProjectionContext,
 ): PredicateResult {
   switch (predicate.kind) {
     case "setGains": {
@@ -156,6 +205,47 @@ function evaluatePredicate(
         bindings: predicate.bind ? { [predicate.bind]: matched } : {},
       };
     }
+    case "measureWorsens":
+    case "measureImproves": {
+      const measure = lookupMeasure(context, predicate.measure);
+      const before = asInt(prev, predicate.var);
+      const after = asInt(curr, predicate.var);
+      if (before === null || after === null) {
+        return { holds: false, bindings: {} };
+      }
+      const direction = worsensBy(measure);
+      const increased = after > before;
+      const decreased = after < before;
+      const worsened = direction === "increase" ? increased : decreased;
+      const improved = direction === "increase" ? decreased : increased;
+      return {
+        holds: predicate.kind === "measureWorsens" ? worsened : improved,
+        bindings: {},
+      };
+    }
+    case "measureEntersWorseSide":
+    case "measureEntersBetterSide": {
+      const measure = lookupMeasure(context, predicate.measure);
+      const threshold = findThreshold(measure, predicate.threshold);
+      if (threshold === undefined) {
+        throw new Error(
+          `projection: 測度 "${measure.id}" に閾値 "${predicate.threshold}" がありません`,
+        );
+      }
+      const before = asInt(prev, predicate.var);
+      const after = asInt(curr, predicate.var);
+      if (before === null || after === null) {
+        return { holds: false, bindings: {} };
+      }
+      const wasWorse = isWorseSide(measure.polarity, threshold, Number(before));
+      const isWorse = isWorseSide(measure.polarity, threshold, Number(after));
+      const entersWorse = !wasWorse && isWorse;
+      const entersBetter = wasWorse && !isWorse;
+      return {
+        holds: predicate.kind === "measureEntersWorseSide" ? entersWorse : entersBetter,
+        bindings: {},
+      };
+    }
   }
 }
 
@@ -163,7 +253,11 @@ function evaluatePredicate(
 
 // 隣接状態の各ペアについて、仕様を満たすイベントを検出する。
 // 戻り値は「遷移ごとの発火イベント列」で、順序は仕様内の規則順。
-export function detectEvents(trace: Trace, spec: ProjectionSpec): FiredEvent[][] {
+export function detectEvents(
+  trace: Trace,
+  spec: ProjectionSpec,
+  context: ProjectionContext = {},
+): FiredEvent[][] {
   const steps: FiredEvent[][] = [];
   const states = trace.states;
 
@@ -177,7 +271,7 @@ export function detectEvents(trace: Trace, spec: ProjectionSpec): FiredEvent[][]
       const bindings: Record<string, string[]> = {};
 
       for (const predicate of rule.when) {
-        const result = evaluatePredicate(predicate, prev, curr);
+        const result = evaluatePredicate(predicate, prev, curr, context);
         if (!result.holds) {
           allHold = false;
           break;
@@ -203,6 +297,14 @@ export function detectEvents(trace: Trace, spec: ProjectionSpec): FiredEvent[][]
   return steps;
 }
 
+// CUEの measures(任意)から、投影エンジンが使う文脈を作る。
+export function makeProjectionContext(measures: Measures | undefined): ProjectionContext {
+  if (measures === undefined) {
+    return {};
+  }
+  return { measures: indexMeasures(measures) };
+}
+
 // 投影仕様の when が参照するQuint変数名を集める。
 // 変数名を間違えると述語が永远に成立せず「何も出ない図」になるため、
 // 宣言済みの変数と突合して事前に検出する(検査は check-consistency が行う)。
@@ -213,6 +315,7 @@ export function referencedVars(spec: ProjectionSpec): string[] {
       if (predicate.kind === "move") {
         refs.push(predicate.from, predicate.to);
       } else {
+        // 測度の述語も var を持つ(測度を保持するQuint変数)。
         refs.push(predicate.var);
       }
     }

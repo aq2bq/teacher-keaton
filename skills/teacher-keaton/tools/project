@@ -10,9 +10,15 @@
 //   形式指定:                --format sequenceDiagram|stateDiagram|json
 //                            (省略時は仕様の format を使う)
 
-import { detectEvents, type ProjectionSpec, type Trace } from "./lib/projection";
+import {
+  detectEvents,
+  makeProjectionContext,
+  type ProjectionSpec,
+  type Trace,
+} from "./lib/projection";
 import { makeLabelResolver, render } from "./lib/render";
-import { cleanupTrace, cueExport, generateTrace, resolveSpecPath } from "./lib/quint";
+import { cleanupTrace, cueExport, generateTrace, resolveSpecPath, tryCueExport } from "./lib/quint";
+import type { Measures } from "./lib/measures";
 import { resolve } from "node:path";
 
 type Options = {
@@ -91,6 +97,9 @@ const vocabulary = await cueExport<Record<string, { id: string; kind: string }>>
   "vocabulary",
 );
 
+// 測度(任意)。極性を知らないと「悪化/改善」の投影を評価できない。
+const measures = await tryCueExport<Measures>(resolvedSpecPath, "measures");
+
 let tracePath: string;
 let temporaryDirectory: string | undefined;
 if (options.tracePath !== undefined) {
@@ -115,7 +124,7 @@ if (format === undefined) {
   process.exit(1);
 }
 
-const steps = detectEvents(trace, spec);
+const steps = detectEvents(trace, spec, makeProjectionContext(measures));
 const resolveLabel = makeLabelResolver(vocabulary);
 process.stdout.write(render(format, steps, resolveLabel));
 

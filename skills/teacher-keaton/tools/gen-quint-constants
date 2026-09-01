@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { writeFileSync } from "node:fs";
 import {
   fetchKnownIds,
+  fetchMeasures,
   generateConstants,
   moduleNameFor,
 } from "./lib/quint-constants.ts";
@@ -12,8 +13,16 @@ import { resolveSpecPath } from "./lib/quint";
 const resolved = resolve(resolveSpecPath(process.argv[2]));
 const ids = fetchKnownIds(resolved);
 const moduleName = moduleNameFor(resolved);
-const content = generateConstants(ids, moduleName);
+// 測度があれば、閾値の定数と「悪い側を検出する」述語も生成する。
+// 比較の向きはCUEの極性から導出され、モデル側で書き分けない。
+const measures = fetchMeasures(resolved);
+const content = generateConstants(ids, moduleName, measures);
 const target = `${resolved}/constants.qnt`;
 
 writeFileSync(target, content);
-console.log(`wrote ${target} (${ids.length} ids)`);
+const measureCount = measures === undefined ? 0 : Object.keys(measures).length;
+console.log(
+  `wrote ${target} (${ids.length} ids` +
+    (measureCount > 0 ? `, ${measureCount} measures` : "") +
+    ")",
+);

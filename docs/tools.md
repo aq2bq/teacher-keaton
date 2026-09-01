@@ -58,6 +58,19 @@ CUEの `glossary`(用語→{id,種別,定義,任意で根拠})をMarkdown表で�
 bun tools/glossary <spec>
 ```
 
+## measures — 測度表
+
+CUEの `measures`(測度→{範囲, 極性, 閾値, 超過時の意味, 極性の根拠})をMarkdown表で出す。
+測度が宣言されていないspecでは何も出さない(終了コード0)。
+
+```sh
+bun tools/measures <spec>
+```
+
+極性は「大きいほど悪い(小さいほど良い)」のように**常に両方向**を書く。
+片方向の表記は読み飛ばされ、名前の印象で向きを取り違える余地を残すため。
+閾値も「3 以上が悪い側 → 要対応として扱う」と、どちら側が悪いかまで書き下す。
+
 ## gen-mermaid-diagram — 概念マップ
 
 CUEの `vocabulary` と `relations` からMermaidの `graph LR`(概念マップ)を生成する。
@@ -89,12 +102,23 @@ bun tools/project <spec> --format <形式>        # 形式の指定
 | `stateDiagram` | 状態間の遷移(状態機械向き) |
 | `json` | 形式非依存のイベント列(投影の中間表現) |
 
+測度の述語(`measureWorsens` / `measureImproves` / `measureEntersWorseSide` /
+`measureEntersBetterSide`)を使う投影では、CUEの `measures` から極性を読み、
+増加が悪化かどうかを解決する。極性が `neutral` / `unresolved` の測度は
+向きを決められないため、評価時に失敗する(黙って何も出さない図にしない)。
+
 `--format` 省略時は `projection.cue` の `format` を使う。
 
 ## gen-quint-constants — Quint定数の生成
 
 CUEの `knownIds` から `constants.qnt` を生成する。Quintはこれを参照して
 生文字列を避ける。`spec/` 内に `constants.qnt` を書く。
+
+`measures` が宣言されていれば、閾値の定数 `<閾値>At` と、極性から導出した
+`<閾値>IsWorseSide(v)` / `<閾値>IsBetterSide(v)` も生成する。比較の向きは
+極性が原本なので、Quint側で `>=` と `<=` を書き分けない。述語名が「その比較が
+悪い側の検出か良い側の検出か」を残す。極性が `neutral` / `unresolved` の測度と、
+整数でない閾値は述語を生成せず、生成しない理由をコメントで残す。
 
 ```sh
 bun tools/gen-quint-constants <spec>
@@ -117,7 +141,15 @@ bun tools/check-consistency <spec>
    (変数名を間違えると「何も出ない図」になるため)
 5. `projection.cue` の `event`/`from`/`to` がCUEの既知idか
    (図に出る語の原本は語彙。イベントも概念として宣言する)
-6. 警告: `vocabulary.cue` の `quintExpected` に挙がっているがQuintで未使用の
+6. 測度(`measures` がある場合):
+   - 測度・閾値のidがCUEの既知idか、`entersState` が既知idか
+   - `quintVar` がQuintで宣言済みか
+   - 閾値を**生の比較**(`v >= 3` / `v <= <閾値>At`)で書いていないか
+     — 生成された述語を迂回すると、比較の向きが追えなくなるため失敗させる
+   - 投影の測度述語が参照する測度・閾値が存在し、極性から向きを決められるか
+   - 警告: 極性が `unresolved`(`TODO.md` へ回すべき状態)、範囲が空、
+     閾値を持つのに極性が `neutral`
+7. 警告: `vocabulary.cue` の `quintExpected` に挙がっているがQuintで未使用の
    概念(モデルの穴)。リストに無い概念は構造・投影専用とみなし警告しない
    (`quintExpected` の未知idは失敗)
 
@@ -155,7 +187,10 @@ bun tools/verify <spec> [--depths 4,8,12] [--timeout <秒>] [--max-steps <n>]
 | `projection.ts` | 差分述語の評価とイベント検出(形式非依存) |
 | `render.ts` | イベント列を sequenceDiagram/stateDiagram/json へ描画 |
 | `glossary.ts` | グロッサリーをMarkdown表へ |
+| `measures.ts` | 測度の極性から比較の向きを導出し、測度表をMarkdownへ |
 | `quint.ts` | quint/cue の呼び出し・トレース生成の共有ヘルパ |
 | `quint-constants.ts` | knownIds取得・モジュール名生成・定数ファイル生成 |
 
 `diagram-gen-bun/` は概念マップ生成のライブラリ。
+`fixtures/measure-spec/` は測度つきspecの最小標本で、`measure-cli.test.ts` が
+極性のミューテーション(反転させると用例が落ちる)と生の閾値比較の検出を回帰させる。

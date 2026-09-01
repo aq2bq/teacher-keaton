@@ -6,9 +6,10 @@
 //   tools/explain <specパス> [--test <テスト名> | --all-tests] [--seed <値>]
 //                 [--max-steps <n>] [--output <パス>]
 //
-// 4つのビューはすべてCUEの語彙とQuintの振る舞いから派生するため、用語と構造の
+// 各ビューはすべてCUEの語彙とQuintの振る舞いから派生するため、用語と構造の
 // 整合性が構造的に保証される。ビューごとに適用可否を検出し、该系统統に合うものだけ出す:
 //   - 用語表       : CUEの glossary があれば
+//   - 測度表       : CUEの measures があれば
 //   - 概念マップ   : CUEの relations があれば
 //   - シーケンス図 : projection.cue に message イベントがあれば
 //   - 状態遷移図   : projection.cue に transition イベントがあれば
@@ -17,9 +18,10 @@
 // 一つのMarkdownに束ねる(成果物化には --output でファイルへ書く)。
 
 import { cleanupTrace, cueExport, findQuintInput, generateTrace, resolveSpecPath, tryCueExport } from "./lib/quint";
-import { detectEvents, projectionVocabRefs, type ProjectionSpec, type Trace } from "./lib/projection";
+import { detectEvents, makeProjectionContext, projectionVocabRefs, type ProjectionSpec, type Trace } from "./lib/projection";
 import { makeLabelResolver, render } from "./lib/render";
 import { renderGlossary, type Glossary } from "./lib/glossary";
+import { renderMeasures, type Measures } from "./lib/measures";
 import { generate as generateConceptMap, type Input as ConceptMapInput } from "./diagram-gen-bun/index";
 import { basename, dirname, resolve, join } from "node:path";
 import { existsSync } from "node:fs";
@@ -112,11 +114,14 @@ if (appName === "keaton") {
   appName = basename(dirname(dirname(resolvedSpecPath)));
 }
 
-// CUEから4ビューの元データを読む。
+// CUEから各ビューの元データを読む。
 const glossary = await cueExport<Glossary>(resolvedSpecPath, "glossary");
 const relations = await cueExport<ConceptMapInput["relations"]>(resolvedSpecPath, "relations");
 const vocabulary = await cueExport<ConceptMapInput["vocabulary"]>(resolvedSpecPath, "vocabulary");
 const projection = await cueExport<ProjectionSpec>(resolvedSpecPath, "projection");
+// 測度(任意)。数値尺度を持つシステムだけが宣言する。
+const measures = await tryCueExport<Measures>(resolvedSpecPath, "measures");
+const projectionContext = makeProjectionContext(measures);
 
 // 解説のメタデータ(任意)。題名・目的・対象範囲・除外範囲を書けば、
 // 解説書が単体で完結する。無ければディレクトリ名を題名にする。
@@ -147,6 +152,7 @@ if (existsSync(verifyResultPath(resolvedSpecPath))) {
 
 // 適用できるビューを検出する。
 const hasGlossary = Object.keys(glossary).length > 0;
+const hasMeasures = measures !== undefined && Object.keys(measures).length > 0;
 const hasConceptMap = relations.length > 0;
 const hasSequence = projection.events.some((event) => event.message !== undefined);
 const hasState = projection.events.some((event) => event.transition !== undefined);
@@ -199,6 +205,12 @@ if (hasGlossary) {
   sections.push("## 用語表", renderGlossary(glossary));
 }
 
+if (hasMeasures && measures !== undefined) {
+  // 測度表: 数値の向き(極性)と閾値の意味を、判定できる形で並べる。
+  // 名前の印象で向きを取り違えるのを防ぐ、照合の主要な材料。
+  sections.push("## 測度(数値尺度)", renderMeasures(measures));
+}
+
 if (hasConceptMap) {
   sections.push(
     "## 概念マップ",
@@ -217,7 +229,7 @@ if (needsTrace && options.allTests) {
   for (const testName of testNames) {
     const generated = await generateTrace(resolvedSpecPath, { mode: "test", testName });
     const trace = await Bun.file(generated.path).json() as Trace;
-    const steps = detectEvents(trace, projection);
+    const steps = detectEvents(trace, projection, projectionContext);
     const testSections: string[] = [`### ${testName}`];
     if (hasSequence) {
       testSections.push(fence(render("sequenceDiagram", steps, resolveLabel)));
@@ -235,7 +247,7 @@ if (needsTrace && options.allTests) {
     : { mode: "test" as const, testName: options.testName };
   const generated = await generateTrace(resolvedSpecPath, source);
   const trace = await Bun.file(generated.path).json() as Trace;
-  const steps = detectEvents(trace, projection);
+  const steps = detectEvents(trace, projection, projectionContext);
 
   if (hasSequence) {
     sections.push("## シーケンス図", fence(render("sequenceDiagram", steps, resolveLabel)));

@@ -12,6 +12,8 @@ fieldLabels: {
 }
 
 // 用語→{id,種別}。図・会話のラベル解決の原本。概念データから自動生成する。
+// 測度(measures.cue)を宣言した場合は、測度と閾値も概念なので語彙に載せる
+// (コメントを外す)。載せないと図のラベルが解決できず、整合検査が落ちる。
 vocabulary: {
 	for _, x in <concepts> {
 		(x.preferredName): {
@@ -19,6 +21,12 @@ vocabulary: {
 			kind: "<kind>"
 		}
 	}
+	// for _, m in measures {
+	// 	(m.preferredName): {id: m.id, kind: "measure"}
+	// 	for _, t in m.thresholds {
+	// 		(t.preferredName): {id: t.id, kind: "threshold"}
+	// 	}
+	// }
 }
 
 // 用語→{id,種別,定義}。用語表の元データ。definitionを集約する。
@@ -34,10 +42,34 @@ glossary: {
 			}
 		}
 	}
+	// 測度を宣言した場合(用語表に測度も出す。極性と閾値は別に測度表が出す)。
+	// for _, m in measures {
+	// 	(m.preferredName): {
+	// 		id:         m.id
+	// 		kind:       "measure"
+	// 		definition: m.definition
+	// 		if m.sources != _|_ {sources: m.sources}
+	// 	}
+	// 	for _, t in m.thresholds {
+	// 		(t.preferredName): {
+	// 			id:         t.id
+	// 			kind:       "threshold"
+	// 			definition: t.meaning
+	// 			if t.sources != _|_ {sources: t.sources}
+	// 		}
+	// 	}
+	// }
 }
 
 // Quint定数の元になる既知idの一覧。
+// 測度を宣言した場合は、測度と閾値のidも含める(閾値の定数と、極性から導出した
+// 「悪い側を検出する」述語が constants.qnt に生成される)。
 knownIds: [for _, x in <concepts> {x.id}]
+// knownIds: list.Concat([
+// 	[for _, x in <concepts> {x.id}],
+// 	[for _, m in measures {m.id}],
+// 	list.Concat([for _, m in measures {[for _, t in m.thresholds {t.id}]}]),
+// ])
 
 // Quintの振る舞いモデルに現れるべき概念(行動の核)のid一覧。
 // check-consistency は、ここに挙がった概念がQuintで未使用の場合だけ警告する。

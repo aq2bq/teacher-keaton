@@ -1,0 +1,20 @@
+#!/usr/bin/env bun
+
+// 測度表を個別に出力するツール。
+// CUEの measures(測度→{範囲, 極性, 閾値, 超過時の意味, 根拠})を読み、
+// Markdownの表で出す。極性(値が大きいほど良いか悪いか)は項目名から
+// 推定できないため、宣言された向きと根拠をそのまま提示して照合に使う。
+//
+//   tools/measures [<specパス>]    (既定: keaton/spec)
+
+import { resolveSpecPath, tryCueExport } from "./lib/quint";
+import { renderMeasures, type Measures } from "./lib/measures";
+
+const specPath = resolveSpecPath(Bun.argv[2]);
+
+const measures = await tryCueExport<Measures>(specPath, "measures");
+if (measures === undefined || Object.keys(measures).length === 0) {
+  console.error("測度(measures)は宣言されていません");
+  process.exit(0);
+}
+process.stdout.write(renderMeasures(measures));

@@ -5,15 +5,25 @@ import { readdirSync, readFileSync, existsSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import {
   fetchKnownIds,
+  fetchMeasures,
   generateConstants,
   moduleNameFor,
+  toQuintName,
 } from "./lib/quint-constants.ts";
 import { resolveSpecPath } from "./lib/quint";
 import { validateProjectionVars, type ProjectionSpec } from "./lib/projection.ts";
+import {
+  findThreshold,
+  indexMeasures,
+  worseSide,
+  worseSideComparison,
+} from "./lib/measures.ts";
 
 const resolved = resolve(resolveSpecPath(process.argv[2]));
 const ids = fetchKnownIds(resolved);
 const knownIds = new Set(ids);
+// 測度(任意)。宣言されていないspecでは測度の検査を丸ごと行わない。
+const measures = fetchMeasures(resolved);
 
 const qntFiles = readdirSync(resolved).filter((f) => f.endsWith(".qnt"));
 if (qntFiles.length === 0) {
@@ -24,6 +34,8 @@ if (qntFiles.length === 0) {
 const errors: string[] = [];
 const usedIds = new Set<string>();
 const quintVars = new Set<string>();
+// 生成物を除いたモデル本体の行(コメント除去済み)。閾値の生の比較を探すのに使う。
+const modelLines: { file: string; line: number; text: string }[] = [];
 const JAPANESE = /[\u3040-\u30ff\u3400-\u9fff]/;
 const LITERAL = /"([^"\\]|\\.)*"/g;
 const CONSTANT_DEF = /pure val (\w+): str = "((?:[^"\\]|\\.)*)"/g;
@@ -69,24 +81,109 @@ for (const file of qntFiles) {
         usedIds.add(id);
       }
     }
-    for (const line of text.split("\n")) {
+    text.split("\n").forEach((line, index) => {
       const match = line.match(VAR_DECL);
       if (match) {
         quintVars.add(match[1]);
       }
-    }
+      modelLines.push({ file, line: index + 1, text: line });
+    });
   }
 }
 
 // 4. constants.qnt の鮮度: 再生成結果と一致しなければ失敗
-const expected = generateConstants(ids, moduleNameFor(resolved));
+const expected = generateConstants(ids, moduleNameFor(resolved), measures);
 if (!existsSync(constantsPath)) {
   errors.push("constants.qnt が存在しません: tools/gen-quint-constants を実行してください");
 } else if (readFileSync(constantsPath, "utf-8") !== expected) {
   errors.push("constants.qnt がCUEのknownIdsと一致しません: tools/gen-quint-constants で再生成してください");
 }
 
-// 5. projection.cue の検査。
+// 5. 測度(数値尺度)の検査。
+// 数値項目は範囲だけでは意味が決まらず、極性(大きいほど良いか悪いか)が別の契約になる。
+// 極性は項目名から推定できないので、宣言・生成・使用が食い違わないことを検査する。
+const measureIndex = measures === undefined ? new Map() : indexMeasures(measures);
+if (measures !== undefined) {
+  for (const measure of measureIndex.values()) {
+    if (!knownIds.has(measure.id)) {
+      errors.push(
+        `measures: "${measure.id}" は既知のCUE idではありません(測度も概念として語彙に載せる)`,
+      );
+    }
+    const range = measure.range ?? {};
+    if (range.min === undefined && range.max === undefined) {
+      console.error(
+        `warning: 測度 ${measure.id} に範囲(range)がありません(尺度の下限か上限のどちらかは残す)`,
+      );
+    }
+    if (measure.polarity === "unresolved") {
+      console.error(
+        `warning: 測度 ${measure.id} の極性が未確認です — keaton/TODO.md に根拠を残し、` +
+          "依存するモデルとビューを保留してください",
+      );
+    }
+    if (measure.quintVar !== undefined && !quintVars.has(measure.quintVar)) {
+      errors.push(
+        `measures: 測度 "${measure.id}" の quintVar "${measure.quintVar}" はQuintで宣言されていません`,
+      );
+    }
+
+    const thresholds = measure.thresholds ?? [];
+    for (const threshold of thresholds) {
+      if (!knownIds.has(threshold.id)) {
+        errors.push(
+          `measures: 閾値 "${threshold.id}" は既知のCUE idではありません(閾値も概念として語彙に載せる)`,
+        );
+      }
+      if (threshold.entersState !== undefined && !knownIds.has(threshold.entersState)) {
+        errors.push(
+          `measures: 閾値 "${threshold.id}" の entersState "${threshold.entersState}" は既知のCUE idではありません`,
+        );
+      }
+    }
+    if (thresholds.length > 0 && worseSide(measure.polarity) === undefined) {
+      console.error(
+        `warning: 測度 ${measure.id} は閾値を持ちますが、極性が ${measure.polarity} のため` +
+          "「どちら側が悪いか」を導出できません(閾値の意味が決まりません)",
+      );
+    }
+
+    // 閾値の生の比較の禁止。生成された述語(向きを名前に持つ)を迂回して
+    // 手で >= / <= を書くと、比較がどちら側の検出かを追えなくなる。
+    const usablePredicates = thresholds.filter(
+      (threshold) =>
+        Number.isInteger(threshold.at) &&
+        worseSideComparison(measure.polarity, threshold.inclusive) !== undefined,
+    );
+    if (measure.quintVar !== undefined && usablePredicates.length > 0) {
+      const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      // 測度の変数を含む行に、閾値の値(または生成された閾値定数)との比較が
+      // 直接書かれていないかを見る。式の形は無数にある(v + 1 >= 3 等)ので、
+      // 変数の隣接ではなく「その行に閾値との比較があるか」で判定する。
+      const usesVariable = new RegExp(`\\b${escapeRegExp(measure.quintVar)}\\b`);
+      const alternatives = usablePredicates
+        .flatMap((threshold) => [String(threshold.at), `${toQuintName(threshold.id)}At`])
+        .map(escapeRegExp)
+        .join("|");
+      const pattern = new RegExp(
+        `(>=|<=|>|<)\\s*(${alternatives})\\b|\\b(${alternatives})\\s*(>=|<=|>|<)`,
+      );
+      const suggestions = usablePredicates
+        .map((threshold) => `${toQuintName(threshold.id)}IsWorseSide`)
+        .join(" / ");
+      for (const line of modelLines) {
+        if (usesVariable.test(line.text) && pattern.test(line.text)) {
+          errors.push(
+            `${line.file}:${line.line}: 測度 "${measure.id}" の閾値を生の比較で書いています — ` +
+              `生成された ${suggestions} を使ってください(比較の向きの原本はCUEの極性)`,
+          );
+        }
+      }
+    }
+  }
+}
+
+// 6. projection.cue の検査。
 // - when が参照するQuint変数が宣言済みか(変名誤りで「何も出ない図」になるため)
 // - event / from / to がCUEの既知idか(図に出る語の原本は語彙。イベントも概念)
 if (existsSync(join(resolved, "projection.cue"))) {
@@ -111,6 +208,34 @@ if (existsSync(join(resolved, "projection.cue"))) {
             );
           }
         }
+        // 測度の述語は、極性を解決できて初めて「悪化/改善」を意味づけられる。
+        if (predicate.kind.startsWith("measure")) {
+          const measureId = (predicate as { measure?: string }).measure;
+          const measure = measureId === undefined ? undefined : measureIndex.get(measureId);
+          if (measure === undefined) {
+            errors.push(
+              `projection.cue: event "${rule.event}" の ${predicate.kind} が参照する測度 "${measureId}" はCUEの measures にありません`,
+            );
+            continue;
+          }
+          if (worseSide(measure.polarity) === undefined) {
+            errors.push(
+              `projection.cue: event "${rule.event}" は測度 "${measure.id}" の悪化/改善を投影していますが、` +
+                `極性が ${measure.polarity} のため向きを決められません`,
+            );
+          }
+          if (measure.quintVar !== undefined && predicate.var !== measure.quintVar) {
+            errors.push(
+              `projection.cue: event "${rule.event}" の var "${predicate.var}" は測度 "${measure.id}" の quintVar "${measure.quintVar}" と一致しません`,
+            );
+          }
+          const thresholdId = (predicate as { threshold?: string }).threshold;
+          if (thresholdId !== undefined && findThreshold(measure, thresholdId) === undefined) {
+            errors.push(
+              `projection.cue: event "${rule.event}" が参照する閾値 "${thresholdId}" は測度 "${measure.id}" にありません`,
+            );
+          }
+        }
       }
       for (const endpoint of [rule.message, rule.transition]) {
         if (endpoint === undefined) continue;
@@ -127,7 +252,7 @@ if (existsSync(join(resolved, "projection.cue"))) {
   }
 }
 
-// 6. 警告: quintExpected に挙がっているがQuintで未使用の概念(モデルの穴)。
+// 7. 警告: quintExpected に挙がっているがQuintで未使用の概念(モデルの穴)。
 // quintExpected は「振る舞いのモデルに現れるべき概念」の正本(vocabulary.cue)。
 // リストに無い概念は構造・投影専用とみなし、Quint未使用を警告しない
 // (原則「健全だが完全ではない」— 全てを形式化しないのは正しい状態)。
@@ -155,4 +280,8 @@ if (errors.length > 0) {
   process.exit(1);
 }
 
-console.log(`ok: ${ids.length} concepts, ${usedIds.size} used in Quint, ${qntFiles.length} files checked`);
+const measureCount = measures === undefined ? 0 : measureIndex.size;
+console.log(
+  `ok: ${ids.length} concepts, ${usedIds.size} used in Quint, ${qntFiles.length} files checked` +
+    (measureCount > 0 ? `, ${measureCount} measures` : ""),
+);

@@ -15,6 +15,7 @@ Rubyの `spec/`(RSpec)など各言語の慣習と衝突しないよう、専用�
     └── spec/
         ├── schema.cue        エンティティのスキーマ・enum・構造制約
         ├── <domain>.cue      ドメインの概念(状態やキャラクター等)。id/preferredName/definition/relations
+        ├── measures.cue      測度(数値尺度)。範囲・極性・閾値・超過時の意味(数値がある場合)
         ├── vocabulary.cue    vocabulary / glossary / knownIds / relations / 参照整合性検査
         ├── projection.cue    投影仕様(状態差分の意味づけ)
         ├── about.cue         解説のメタデータ(題名・目的・範囲・除外範囲。任意)
@@ -82,6 +83,81 @@ Rubyの `spec/`(RSpec)など各言語の慣習と衝突しないよう、専用�
 既知の限界: 検査されるのは書かれた用例だけ(網羅ではなく標本)。また
 負例が「拒否された」とき、意図した制約で拒否されたか、負例ファイル自体の
 タイプミスで拒否されたかは区別できない。
+
+## 測度(数値尺度)
+
+数値項目は**範囲だけでは意味が決まらない**。値が大きくなるほど良い状態なのか
+悪い状態なのかという契約(**極性**)が別にあり、これは項目名から推定できない。
+「品質」「満足度」のように名前が肯定的でも、実際には「悪さ」「気になる程度」
+「困りごとの強さ」を測っていて、小さいほど良い尺度であることがある。
+
+そこで、各測度について**範囲・極性・閾値・閾値を超えたときの意味**を一組で宣言し、
+比較の向きはそこから導出する。測度と閾値も概念なので、安定idと表示名を持ち、
+`vocabulary` / `glossary` / `knownIds` に載せる。
+
+```cue
+measures: {
+  annoyance: #Measure & {
+    id:            "measure-annoyance"
+    preferredName: "気になる度"
+    definition:    "利用者が気にしている度合い。名前は肯定的だが、測っているのは困りごとの強さ。"
+    range: {min: 0, max: 10}
+    polarity: "lowerIsBetter"           // higherIsBetter | lowerIsBetter | neutral | unresolved
+    polarityEvidence: [{location: "src/alert.ts:12", note: "値が大きいときに警告"}]
+    quintVar: "annoyance"
+    thresholds: [{
+      id: "threshold-annoyance-high", preferredName: "要対応の閾値"
+      at: 3, inclusive: true, meaning: "要対応として扱う", entersState: "alert"
+    }]
+  }
+}
+```
+
+- `polarity` は enum。`unresolved` 以外では `polarityEvidence` を**1件以上必須**にして、
+  「名前から推定した向き」が入り込む余地を消す。
+- `inclusive` は閾値の値そのものを悪い側に含めるか(既定 `true`)。
+  「3以上は要対応」は既定、「80未満は不合格」は `inclusive: false`。
+- 実コードから向きが決まらない場合は発明せず、`polarity: "unresolved"` と
+  `unresolvedNote`(決まらない理由)を書き、未解決の食い違いとして `TODO.md` へ渡す。
+  `neutral` は「良し悪しの向きを持たない」(座標・設定値等)であり、
+  「分からない」とは別物なので混同しない。
+
+### 極性の根拠として認めるもの
+
+| 探す場所 | 何が分かるか |
+|---|---|
+| 閾値を超えたときの分岐先 | 警告・アラート・エスカレーションが出る側が悪い側 |
+| 文言(メッセージ・ラベル) | 「要対応」「良好」がどちらの値に付くか |
+| ソート順 | 悪いものを上に出しているか |
+| 色分け・アイコン | 赤や警告色が付く側 |
+| 集計での扱い | `min`/`max` のどちらを「最悪」と呼ぶか |
+
+### 比較の向きを書き分けない
+
+`>=` と `<=` を人が書き分ける箇所を作らない。向きの原本は極性であり、
+そこから導出する経路が3つ用意されている。
+
+| 層 | 導出のしかた |
+|---|---|
+| CUE(用例) | `#MeasureVerdict` に測度・閾値・値を渡すと `isWorseSide` が導出される |
+| Quint(実装) | `gen-quint-constants` が `<閾値>IsWorseSide` / `<閾値>IsBetterSide` を生成する |
+| 投影(図) | `measureWorsens` / `measureImproves` / `measureEntersWorseSide` |
+
+`check-consistency` は、測度の変数と閾値を**生の比較**(`v >= 3`、
+`v <= <閾値>At`)で書いた行を検出して失敗させる。生成された述語の名前が
+「その比較が悪い側の検出か良い側の検出か」を残すため、公開識別子を変えられない
+場合でも、内部の意味名から向きを追える。
+
+### 動作のテストと意味のテストを分ける
+
+| テスト | 何を確かめるか | どこに書くか |
+|---|---|---|
+| 動作テスト | 閾値の前後で結果が変わる。閾値の値そのものがどちら側か | Quint の `run ...Test` |
+| 意味テスト | 極性と閾値の解釈が仕様と一致する | CUE の `positives/`・`negatives/`(`#MeasureVerdict`)、Quint の頂層 `val` |
+
+意味テストの負例は「逆向きの解釈が拒否されること」を書く。
+さらに、**宣言した極性を反転させて `vet` が落ちるか**を見ると、その極性が
+モデルの荷重部材になっているか(飾りになっていないか)を確かめられる。
 
 ## 安定識別子(stable id)
 
@@ -194,6 +270,14 @@ projection: {
 | `intIncreases` | 整数が**増えた** | — |
 | `boolBecomes` | ブールが指定値に**変わった** | — |
 | `sequenceAppends` | リスト(観測ログ)に要素が**加わった** | 加わった要素 |
+| `measureWorsens` | 測度が**悪化した**(向きは極性から解決) | — |
+| `measureImproves` | 測度が**改善した**(向きは極性から解決) | — |
+| `measureEntersWorseSide` | 測度が閾値の**悪い側へ入った** | — |
+| `measureEntersBetterSide` | 測度が閾値の**良い側へ戻った** | — |
+
+測度の述語は `measure: "<測度id>"`(閾値の跨ぎはさらに `threshold: "<閾値id>"`)を取り、
+`var` は測度の `quintVar` と一致していなければならない。増加が悪化かどうかは
+極性から解決されるため、投影に向きを書かない — 極性を直せば図が自動で追随する。
 
 `sequenceAppends` は `value` で特定のイベント定数に絞り込める。
 拒否・重複拒否のようにドメイン状態を変えない事象は、観測専用のリスト変数

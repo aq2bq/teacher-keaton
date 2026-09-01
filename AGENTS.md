@@ -75,7 +75,7 @@
 | **CUE=構造、Quint=振る舞い**の2層 | 「静的に保証できること」と「時間とともに変化するもの」の自然な境界 |
 | **CUEが語彙の原本** | 用語・定義を一元化し、全ビューで構造的に一致させるため |
 | **ドメイン解釈は `projection.cue`、ツールは汎用** | ツールにドメインを焼き込むと他システムに使えない(経緯2の失敗) |
-| **適応型ビュー(4つを強制しない)** | ナラティブに状態図を、状態機械にシーケンス図を無理に出さない |
+| **適応型ビュー(すべてを強制しない)** | ナラティブに状態図を、状態機械にシーケンス図を無理に出さない |
 | **健全だが完全ではない** | 全部の形式化は破綻する。機械検査する価値のあるものだけ形式化 |
 | **成果物は `keaton/spec`** | 各言語の `spec/` 慣習(RSpec等)と衝突しないため |
 | **フェーズ0でスコープ合意** | 対象が曖昧なままだと時間とクレジットを浪費し収束しないため |
@@ -87,6 +87,7 @@
 | **観測事実の根拠は概念の `sources` に残す** | 根拠のないモデルはハルシネーションと区別できない。特にコード以外(文書・表)を事実源にする適用で監査性を担保するため、`location` は自由形式(行番号に縛られない)で、用語表に根拠カラムとして出す |
 | **境界条件は正例・負例の両方で検証する** | `cue vet` は矛盾しか検出できず、緩すぎる制約(許可すべきでないものを許可する)は通してしまう。「モデルが実際には保証していないことを保証しているように見える」のを防ぐため、specの `positives/`・`negatives/` で「通るべきものが通り、拒むべきものが拒まれる」ことを `tools/vet` が機械的に検証する |
 | **`verify` は4→8→12の段階探索で到達深度を記録する** | 検証コストは深度に対して掛け算で爆発しうるため、深い深度の一発勝負は「長時間待って何も得られない」になり得る。浅い深度から始めて段ごとに時間上限を設ければ、どの時点で止まっても「どこまで保証できたか」が残る。浅い深度でのタイムアウトは、対象の拡散を知らせ、スコープ再合意か抽象化を提案する引き金になる |
+| **数値の極性は宣言し、比較の向きは導出する** | 数値項目は範囲だけでは意味が決まらず、「値が大きいほど良いか悪いか」という契約(極性)が別にある。名前は向きの根拠にならない(「品質」「満足度」という名前で悪さを測っていることがある)ため、極性を根拠つきでCUEに宣言し、CUEの用例(`#MeasureVerdict`)・Quintの述語(生成)・投影の述語の3経路すべてを極性から導出する。手で `>=` と `<=` を書き分ける箇所を作らなければ、仕様・実装・テスト・図の間で向きが食い違えない。実適用で「名前が肯定的な尺度が実は小さいほど良い」という取り違えが起きたことへの対処 |
 | **最終報告は明示的に照合の判定を依頼する** | ビューは照合のための「提案」であり、人間の役目はそれを判定すること。判定を依頼しなければ成果物は完成品として鵜呑みにされ、照合が起きない。フェーズ0で合意した照合基準を出口でも機能させるため、最終報告は判定依頼の列挙・照合基準との突合・反応のしかたの案内を、`TODO.md` の有無にからず必ず含む |
 
 ---
@@ -103,7 +104,7 @@ teacher-keaton/
 │   └── tools.md                # ツールリファレンス
 ├── skills/teacher-keaton/
 │   ├── SKILL.md                # エージェントが読む手順書(配布される本体)
-│   ├── tools/                  # Bunツール(explain/project/glossary/…+lib)
+│   ├── tools/                  # Bunツール(explain/project/glossary/measures/…+lib)
 │   └── templates/              # 新規プロジェクト用spec雛形
 └── examples/                   # 2つのアーキタイプの手本
     ├── momotaro/               # ナラティブ → シーケンス図
@@ -152,6 +153,11 @@ skills/teacher-keaton/tools/explain  examples/momotaro/spec  --test fullStoryTes
 skills/teacher-keaton/tools/explain  examples/todo-cli/spec  --test reopenTaskTest
 skills/teacher-keaton/tools/explain  examples/todo-cli/spec  --test busyStartRecordedTest
 skills/teacher-keaton/tools/check-consistency examples/todo-cli/spec
+
+# 測度(数値尺度)の回帰。fixtureは配布物の中にあり、bun test からも回る
+skills/teacher-keaton/tools/vet               skills/teacher-keaton/tools/fixtures/measure-spec
+skills/teacher-keaton/tools/check-consistency skills/teacher-keaton/tools/fixtures/measure-spec
+skills/teacher-keaton/tools/measures          skills/teacher-keaton/tools/fixtures/measure-spec
 skills/teacher-keaton/tools/verify   examples/momotaro/spec  # 不変条件の全件検証(段階探索4→8→12、約20秒)
 ```
 
@@ -169,7 +175,8 @@ skills/teacher-keaton/tools/verify   examples/momotaro/spec  # 不変条件の�
 これは**長期β**であり、実プロジェクトへの適用を通じて継続的に収束させる。
 完成形を前もって決めつけず、実適用から学ぶ姿勢を保つこと。
 
-- 現状: 4ビューの適応型投影、フェーズ0のスコープ合意、2アーキタイプの手本が揃った状態。
+- 現状: 4ビューの適応型投影(+測度を宣言した場合の測度表)、フェーズ0のスコープ合意、
+  2アーキタイプの手本が揃った状態。
 - 今後の候補(固定の計画ではなく、実適用に応じて優先づけが変わる):
   - 実際のリポジトリでの初適用(βとしての最大の検証)
   - インストール実証(`npx skills add` が別環境で通るか)

@@ -18,6 +18,14 @@ module <Name> {
   // var <setVar>: Set[str]
   //   例: <setVar>' = <setVar>.union(Set(<constantName>))
 
+  // パターンC(測度): 数値尺度は int で保持する。閾値との比較を生で書かず、
+  // constants.qnt に生成された述語を使う。述語の名前(IsWorseSide /
+  // IsBetterSide)が「その比較がどちら側を検出するか」を残すため、
+  // 項目名の印象で向きを取り違えても検査で気づける。
+  // var <measureVar>: int
+  // var <flagVar>: bool
+  //   例: <flagVar>' = <thresholdName>IsWorseSide(<measureVar>')
+
   /// 初期状態。
   action init: bool =
     <stateA>Ids' = Set()
@@ -40,6 +48,11 @@ module <Name> {
   }
 
   /// 不変条件: 常に成り立つこと。モデルの主張。
+  /// 測度を持つ場合は、動作(閾値の前後で結果が変わる)と意味(極性と閾値の
+  /// 解釈が仕様と一致する)を分けて主張する。意味の主張は不変条件で書く:
+  // val <FlagMatchesThreshold>: bool =
+  //   <flagVar> == <thresholdName>IsWorseSide(<measureVar>)
+
   /// 頂層の `val <Name>: bool` は tools/verify がすべて抽出して検証する。
   /// 補助の補題は def / pure def で書く(不変条件として抽出されない)。
   /// 例: 「各要素は同時に一つの状態にのみ属する」
@@ -49,6 +62,8 @@ module <Name> {
   /************ シナリオテスト(名前は Test で終わらせる) ************/
 
   /// 代表的な筋。宣言(期待する振る舞い)になる。
+  /// 測度の動作テストは、閾値の直前と直後で判定が変わることを見る
+  /// (閾値の値そのものがどちら側かも、ここで固定する)。
   run <scenario>Test = {
     init.then(<transition>(1)).then(all {
       assert(<stateB>Ids == Set(1)),
