@@ -88,6 +88,7 @@ describe("成果物の出力先", () => {
     expect(explanation).toContain("## 形式モデルの検証");
     expect(explanation).toContain("不変条件 1/1 件で反証なし (探索深度 12)");
     expect(explanation).toContain("現場運用の実効性は検証していません");
+    expect(explanation).not.toContain("## 運用未確定");
     expect(readdirSync(join(workspace, "keaton/tmp"))).toEqual([]);
   });
 });

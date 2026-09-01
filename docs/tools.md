@@ -56,8 +56,10 @@ bun tools/explain <spec> --focus <用語または概念id> [--focus-depth <n>]
 関係は向きを問わず一辺として数える。用語と安定idの両方を指定できるが、
 改名後も同じ実行を再現する必要がある場合は安定idを使う。
 
-specに `about: {title, purpose, scope, exclusions}` があれば、題名と
+specに `about: {title, purpose, scope, exclusions, operationalUndecided}` があれば、題名と
 `## 概要`(目的・対象範囲・除外範囲)を出力する(無ければディレクトリ名が題名)。
+`operationalUndecided` が1件以上あれば、原資料上で未決定だが観測事実同士は両立する
+事項を `## 運用未確定` 節として出力する。これは `TODO.md` の未解決の食い違いとは別である。
 `tools/verify` が書き出した `verify-result.json` があれば、`## 形式モデルの検証` 節として
 不変条件名・成否・到達深度を取り込む。同節は、教育・記録・遵守を含む現場運用の
 実効性が検証対象外であることも明示する。これで解説書が単体で完結する。

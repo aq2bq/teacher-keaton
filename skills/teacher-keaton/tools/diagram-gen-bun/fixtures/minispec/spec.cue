@@ -21,3 +21,11 @@ glossary: {
 }
 
 projection: {events: []}
+
+about: {
+	title: "注文ミニ仕様"
+	operationalUndecided: [
+		"棚卸し記録の担当者は原資料で未決定。",
+		"倉庫担当者への教育時期は原資料で未決定。",
+	]
+}

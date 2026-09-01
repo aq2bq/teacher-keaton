@@ -26,6 +26,20 @@ test("explain は概念マップだけを中心概念の近傍へ絞る", async 
   expect(conceptMap).not.toContain("倉庫");
 });
 
+test("explain は運用未確定を未解決の食い違いと分けて表示する", async () => {
+  const child = Bun.spawn(["bun", explain, spec], {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const stdout = await new Response(child.stdout).text();
+
+  expect(await child.exited).toBe(0);
+  expect(stdout).toContain("## 運用未確定");
+  expect(stdout).toContain("- 棚卸し記録の担当者は原資料で未決定。");
+  expect(stdout).toContain("- 倉庫担当者への教育時期は原資料で未決定。");
+  expect(stdout).not.toContain("# 未解決の食い違い");
+});
+
 test("explain は未知の中心概念をエラーにする", async () => {
   const child = Bun.spawn([
     "bun", explain, spec,
