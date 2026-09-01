@@ -19,16 +19,18 @@
 // keaton/explanation.md へ保存する。
 
 import {
-  artifactRootForSpec,
   cleanupTrace,
   cueExport,
-  explanationPathForSpec,
   findQuintInput,
   generateTrace,
-  resolveArtifactOutputPath,
   resolveSpecPath,
   tryCueExport,
 } from "./lib/quint";
+import {
+  artifactRootForSpec,
+  explanationPathForSpec,
+  resolveArtifactOutputPath,
+} from "./lib/artifacts";
 import { detectEvents, makeProjectionContext, projectionVocabRefs, type ProjectionSpec, type Trace } from "./lib/projection";
 import { makeLabelResolver, render } from "./lib/render";
 import { renderGlossary, type Glossary } from "./lib/glossary";

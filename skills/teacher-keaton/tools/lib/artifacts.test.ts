@@ -16,7 +16,7 @@ import {
   explanationPathForSpec,
   resolveArtifactOutputPath,
   temporaryRootForSpec,
-} from "./quint";
+} from "./artifacts";
 
 describe("成果物の出力先", () => {
   const keatonSpec = resolve("keaton/spec");

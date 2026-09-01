@@ -32,7 +32,8 @@
 import { readdirSync, readFileSync, rmSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
-import { artifactRootForSpec, resolveSpecPath } from "./lib/quint";
+import { artifactRootForSpec } from "./lib/artifacts";
+import { resolveSpecPath } from "./lib/quint";
 
 type Options = {
   specPath: string;

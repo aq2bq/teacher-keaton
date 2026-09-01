@@ -25,7 +25,8 @@
 import { mkdirSync, mkdtempSync, readdirSync, copyFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
-import { resolveSpecPath, temporaryRootForSpec } from "./lib/quint";
+import { temporaryRootForSpec } from "./lib/artifacts";
+import { resolveSpecPath } from "./lib/quint";
 
 function vetDirectory(dir: string): { status: number; output: string } {
   const result = spawnSync("cue", ["vet", "-c", "."], {
