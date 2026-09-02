@@ -12,6 +12,8 @@ package <name>
 		id:            "<kind>-<key1>"
 		preferredName: "<表示名1>"
 		definition:    "<定義1>"
+		origin:        "observed"
+		sources: [{location: "<ファイル:行または文書の節>", note: "<名称または定義を直接確認できる箇所>"}]
 		// relations: [{type: "<relation-type>", target: "<kind>-<key2>"}]
 	}
 
@@ -19,5 +21,8 @@ package <name>
 		id:            "<kind>-<key2>"
 		preferredName: "<表示名2>"
 		definition:    "<定義2>"
+		origin:        "inferred"
+		sources: [{location: "<ファイル:行または文書の節>", note: "<基にした観測事実>"}]
+		inferenceReason: "<観測事実から、この概念をモデルに置いた理由>"
 	}
 }

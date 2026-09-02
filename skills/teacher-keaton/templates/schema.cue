@@ -8,22 +8,36 @@ package <name>
 
 // 中心となるエンティティのスキーマ。
 // <kind> は種別(例: "character" / "item" / "status")。
-#<Concept>: {
+#<Concept>: #ConceptProvenance & {
 	id:            string @ja(識別子)
 	preferredName: string @ja(名称)
 	definition:    string @ja(定義)
 	// 必要に応じて属性や関係を足す。
 	// relations?: [...#Relation] @ja(関係)
-	// 観測事実をどこで観測したか(監査性)。あれば用語表に根拠カラムが出る。
-	// sources?: [...#Source] @ja(根拠)
 }
 
-// 根拠。観測事実の位置は自由形式(コードに行番号が無い文書・表でも使える)。
+// 概念の由来と根拠。原資料に直接ある概念も、観測事実からモデル化のために
+// 置いた概念も、基にした観測位置を1件以上持つ。
+#ConceptOrigin: "observed" | "inferred"
+
+#ConceptProvenance: {
+	origin:  #ConceptOrigin @ja(由来)
+	sources: [#Source, ...#Source] @ja(観測位置)
+	if origin == "inferred" {
+		inferenceReason: string & !="" @ja(推論理由)
+	}
+	if origin == "observed" {
+		inferenceReason?: _|_ @ja(推論理由)
+	}
+	...
+}
+
+// 観測位置は自由形式(コードに行番号が無い文書・表でも使える)。
 // 例: "src/task.ts:1" / "出荷規則.md §3.2" / "在庫.xlsx 'ロット状態'シート"
-// #Source: {
-// 	location: string @ja(位置)
-// 	note?:    string @ja(注記)
-// }
+#Source: {
+	location: string & !="" @ja(位置)
+	note?:    string @ja(注記)
+}
 
 // 関係のスキーマ(概念同士を繋ぐ場合)。
 // #Relation: {
@@ -37,7 +51,6 @@ package <name>
 // ような肯定的な名前で「悪さ」「気になる程度」を測っていることがあるため、
 // 範囲・極性・閾値・超過時の意味・根拠を一組で宣言する。
 // 数値尺度を持たないシステムでは、この節ごと削除してよい。
-// 使う場合は、上の #Source の定義(コメント)を有効にすること。
 
 // 極性: 値が大きくなるほど良い状態か、悪い状態かの契約。
 #Polarity:
@@ -46,7 +59,7 @@ package <name>
 	"neutral" | // 良し悪しの向きを持たない(座標・設定値等)
 	"unresolved" // 実コードからは向きが決まらない(TODO.mdで判断を仰ぐ)
 
-#Measure: {
+#Measure: #ConceptProvenance & {
 	id:            string     @ja(識別子)
 	preferredName: string     @ja(名称)
 	definition:    string     @ja(定義)
@@ -75,10 +88,9 @@ package <name>
 	quintVar?: string @ja(振る舞いの変数)
 
 	thresholds?: [...#Threshold] @ja(閾値)
-	sources?: [...#Source] @ja(根拠)
 }
 
-#Threshold: {
+#Threshold: #ConceptProvenance & {
 	id:            string @ja(識別子)
 	preferredName: string @ja(名称)
 	at:            number @ja(閾値)
@@ -89,7 +101,6 @@ package <name>
 	meaning: string @ja(超過時の意味)
 	// 超えたときに入る状態(モデルにあれば既知id)。
 	entersState?: string @ja(遷移先状態)
-	sources?: [...#Source] @ja(根拠)
 }
 
 // 極性から比較の向きを導出する。>= と <= を人が書き分ける箇所を作らないための型。

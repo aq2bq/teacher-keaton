@@ -15,9 +15,19 @@ relations: [
 ]
 
 glossary: {
-	"注文": {id: "order", kind: "entity", definition: "商品を含む取引単位。"}
-	"商品": {id: "product", kind: "entity", definition: "注文に含まれる品目。"}
-	"倉庫": {id: "warehouse", kind: "entity", definition: "商品を保管する場所。"}
+	"注文": {
+		id: "order", kind: "entity", definition: "商品を含む取引単位。"
+		origin: "observed", sources: [{location: "fixture.cue:4", note: "注文概念"}]
+	}
+	"商品": {
+		id: "product", kind: "entity", definition: "注文に含まれる品目。"
+		origin: "observed", sources: [{location: "fixture.cue:5", note: "商品概念"}]
+	}
+	"倉庫": {
+		id: "warehouse", kind: "entity", definition: "商品を保管する場所。"
+		origin: "inferred", sources: [{location: "fixture.cue:11", note: "倉庫から商品への保管関係"}]
+		inferenceReason: "保管関係の主体を概念マップのノードとして表すため。"
+	}
 }
 
 projection: {events: []}

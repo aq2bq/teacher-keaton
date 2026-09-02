@@ -9,7 +9,7 @@
 //   このライブラリは特定ドメインの語を持たない汎用の機械であり、
 //   意味づけはすべてCUE側の宣言にある。
 
-import type { Source } from "./glossary";
+import type { ConceptProvenance, Source } from "./glossary";
 
 // 数値の極性: 値が大きくなるほど良い状態か、悪い状態かの契約。
 //   higherIsBetter 大きいほど良い(悪い側は小さい方)
@@ -18,7 +18,7 @@ import type { Source } from "./glossary";
 //   unresolved     実コードからは向きが決まらない(TODO.mdで人間の判断を仰ぐ)
 export type Polarity = "higherIsBetter" | "lowerIsBetter" | "neutral" | "unresolved";
 
-export type Threshold = {
+export type Threshold = ConceptProvenance & {
   id: string;
   preferredName: string;
   at: number;
@@ -29,10 +29,9 @@ export type Threshold = {
   meaning: string;
   // 超えたときに入る状態(モデルにあれば既知id)。
   entersState?: string;
-  sources?: Source[];
 };
 
-export type Measure = {
+export type Measure = ConceptProvenance & {
   id: string;
   preferredName: string;
   definition: string;
@@ -46,7 +45,6 @@ export type Measure = {
   // 振る舞い(Quint)でこの測度を保持する変数名。
   quintVar?: string;
   thresholds?: Threshold[];
-  sources?: Source[];
 };
 
 export type Measures = Record<string, Measure>;

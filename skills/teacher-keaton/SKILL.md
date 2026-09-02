@@ -205,8 +205,11 @@ CUEのid/名を参照し、独自に作り出さない。
 - ドメインファイル(例: `statuses.cue`): 各概念に `id`, `preferredName`,
   `definition`, `relations`。**イベント(遷移・メッセージの名前)も概念として
   宣言する** — 図のラベルはイベントのidから語彙の表示名へ解決される。
-  観測事実の根拠(ファイル:行番号、文書の節等)は任意の `sources` に残すと
-  用語表に根拠カラムが出て、監査できるようになる
+  用語表へ投影する全概念に `origin`(由来)と1件以上の `sources`(観測位置)を持たせる。
+  原資料に直接ある概念は `origin: "observed"` とする。
+  観測事実からモデル化のために追加したイベントや状態は `origin: "inferred"` とし、
+  `sources` に加えて空でない `inferenceReason`(追加理由)を持たせる。
+  推論は根拠の代わりではないため、`inferred` でも観測位置を省略しない
 - `measures.cue`(数値尺度がある場合): 各測度に `id`, `preferredName`, `definition`,
   `range`, **`polarity`**, `polarityEvidence`(極性の根拠。1件以上必須),
   `thresholds`(`at` / `inclusive` / `meaning` / 任意の `entersState`)。
@@ -214,7 +217,10 @@ CUEのid/名を参照し、独自に作り出さない。
   比較の向きは手で書かず、`#MeasureVerdict` を通して極性から導出する
 - `vocabulary.cue`: `vocabulary`(用語→{id,種別})、`glossary`(用語→{id,種別,定義})、
   `knownIds`、`relations`、参照整合性検査。`templates/` を出発点にする。
-  測度を宣言した場合は、測度と閾値も `vocabulary` / `glossary` / `knownIds` に含める
+  測度を宣言した場合は、測度と閾値も `vocabulary` / `glossary` / `knownIds` に含め、
+  通常概念と同じ由来と根拠の契約を適用する。
+  `knownIds` の全概念を `glossary` に含め、`origin`、`sources`、必要な
+  `inferenceReason` を概念データから伝播させる
 
 検証: `bun <skill-dir>/tools/vet <specパス>`
 (`cue vet -c` を相対パス直接実行するとCUEのバージョンにより
@@ -491,6 +497,9 @@ CUEとQuintが検査するのは、モデルへ入れた前提に対する整合
   (`char-`, `item-`)。状態は状態名をidにしてよい
 - **CUEが語彙の原本**: 表示名と定義はCUEに置く。Quintと図はCUEからラベルを
   解決し、名前をハードコードしない
+- **全概念に由来と観測位置**: 用語表へ投影する全概念に `origin` と1件以上の
+  `sources` を持たせる。`inferred` には `inferenceReason` も持たせ、推論理由で
+  観測位置を置き換えない
 - **Quintに生文字列を置かない**: `constants.qnt` を参照。`check-consistency` が強制
 - **不変条件は頂層の `val <Name>: bool`**: `tools/verify` がこれを検証対象一覧の
   正本として全件検証する。補助の補題は `def` / `pure def` で書く
@@ -515,7 +524,7 @@ CUEとQuintが検査するのは、モデルへ入れた前提に対する整合
 | `project` | `projection.cue`+Quintトレースから振る舞い図(`--format sequenceDiagram\|stateDiagram\|json`) |
 | `verify` | 不変条件(頂層 `val X: bool`)を全件抽出して `quint verify` |
 | `gen-quint-constants` | CUEの `knownIds` から `constants.qnt` を生成 |
-| `check-consistency` | CUE↔Quintの語彙整合と投影の参照(変数・既知id)を検査 |
+| `check-consistency` | CUE↔Quintの語彙整合、全概念の由来と根拠、投影の参照(変数・既知id)を検査 |
 
 ## 注意点
 

@@ -14,6 +14,9 @@ fieldLabels: {
 	"名称":     "preferredName"
 	"別名":     "aliases"
 	"定義":     "definition"
+	"由来":     "origin"
+	"観測位置":   "sources"
+	"推論理由":   "inferenceReason"
 	"関係":     "relations"
 	"関係種別": "type"
 	"対象":     "target"
@@ -62,6 +65,8 @@ glossary: {
 			id:         c.id
 			kind:       "character"
 			definition: c.definition
+			origin:     c.origin
+			sources:    c.sources
 		}
 	}
 	for name, i in items {
@@ -69,6 +74,8 @@ glossary: {
 			id:         i.id
 			kind:       "item"
 			definition: i.definition
+			origin:     i.origin
+			sources:    i.sources
 		}
 	}
 	for name, e in events {
@@ -76,6 +83,8 @@ glossary: {
 			id:         e.id
 			kind:       "event"
 			definition: e.definition
+			origin:     e.origin
+			sources:    e.sources
 		}
 	}
 }

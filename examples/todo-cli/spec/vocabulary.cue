@@ -20,6 +20,8 @@ fieldLabels: {
 	"コマンド":      "type"
 	"遷移先":       "target"
 	"根拠":        "sources"
+	"由来":        "origin"
+	"推論理由":      "inferenceReason"
 	"位置":        "location"
 	"注記":        "note"
 }
@@ -57,9 +59,9 @@ glossary: {
 			id:         status.id
 			kind:       "status"
 			definition: status.definition
-			if status.sources != _|_ {
-				sources: status.sources
-			}
+			origin:     status.origin
+			sources:    status.sources
+			if status.origin == "inferred" {inferenceReason: status.inferenceReason}
 		}
 	}
 	for _, event in events {
@@ -67,9 +69,9 @@ glossary: {
 			id:         event.id
 			kind:       "event"
 			definition: event.definition
-			if event.sources != _|_ {
-				sources: event.sources
-			}
+			origin:     event.origin
+			sources:    event.sources
+			if event.origin == "inferred" {inferenceReason: event.inferenceReason}
 		}
 	}
 }

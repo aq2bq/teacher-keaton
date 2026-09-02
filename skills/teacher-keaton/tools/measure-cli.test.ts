@@ -45,6 +45,22 @@ test("測度つきspecは、構造検証と整合検査を通る", async () => {
   expect(consistency.stderr).not.toContain("モデルの穴");
 });
 
+test("用語表に観測位置のない概念があれば整合検査を拒否する", async () => {
+  const { specPath, cleanup } = copyFixture();
+  try {
+    edit(
+      join(specPath, "spec.cue"),
+      "origin: x.origin, sources: x.sources",
+      "origin: x.origin",
+    );
+    const result = await run("check-consistency", specPath);
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain("観測位置 sources が1件以上必要です");
+  } finally {
+    cleanup();
+  }
+});
+
 test("閾値の生成記号は参照したときだけ使用済みになり、importだけでは数えない", async () => {
   const { specPath, cleanup } = copyFixture();
   try {

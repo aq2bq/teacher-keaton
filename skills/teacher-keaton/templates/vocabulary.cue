@@ -6,9 +6,12 @@ import "list"
 
 // 属性名の表示呼称(任意)。キーが重複して別フィールドを指すと衝突して検出できる。
 fieldLabels: {
-	"識別子": "id"
-	"名称":  "preferredName"
-	"定義":  "definition"
+	"識別子":  "id"
+	"名称":   "preferredName"
+	"定義":   "definition"
+	"由来":   "origin"
+	"観測位置": "sources"
+	"推論理由": "inferenceReason"
 }
 
 // 用語→{id,種別}。図・会話のラベル解決の原本。概念データから自動生成する。
@@ -29,16 +32,17 @@ vocabulary: {
 	// }
 }
 
-// 用語→{id,種別,定義}。用語表の元データ。definitionを集約する。
-// 根拠(sources)を宣言した概念は、それも集約して用語表に出す。
+// 用語→{id,種別,定義,由来,観測位置,推論理由}。用語表の元データ。
 glossary: {
 	for _, x in <concepts> {
 		(x.preferredName): {
 			id:         x.id
 			kind:       "<kind>"
 			definition: x.definition
-			if x.sources != _|_ {
-				sources: x.sources
+			origin:     x.origin
+			sources:    x.sources
+			if x.origin == "inferred" {
+				inferenceReason: x.inferenceReason
 			}
 		}
 	}
@@ -48,14 +52,18 @@ glossary: {
 	// 		id:         m.id
 	// 		kind:       "measure"
 	// 		definition: m.definition
-	// 		if m.sources != _|_ {sources: m.sources}
+	// 		origin:     m.origin
+	// 		sources:    m.sources
+	// 		if m.origin == "inferred" {inferenceReason: m.inferenceReason}
 	// 	}
 	// 	for _, t in m.thresholds {
 	// 		(t.preferredName): {
 	// 			id:         t.id
 	// 			kind:       "threshold"
 	// 			definition: t.meaning
-	// 			if t.sources != _|_ {sources: t.sources}
+	// 			origin:     t.origin
+	// 			sources:    t.sources
+	// 			if t.origin == "inferred" {inferenceReason: t.inferenceReason}
 	// 		}
 	// 	}
 	// }

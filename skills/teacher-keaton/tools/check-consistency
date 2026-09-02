@@ -18,6 +18,7 @@ import {
   worseSide,
   worseSideComparison,
 } from "./lib/measures.ts";
+import { validateGlossaryProvenance, type Glossary } from "./lib/glossary.ts";
 
 const resolved = resolve(resolveSpecPath(process.argv[2]));
 const ids = fetchKnownIds(resolved);
@@ -41,6 +42,31 @@ const LITERAL = /"([^"\\]|\\.)*"/g;
 const CONSTANT_DEF = /pure val (\w+): str = "((?:[^"\\]|\\.)*)"/g;
 const VAR_DECL = /^\s*var (\w+)\s*:/;
 const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+// 0. 用語表へ投影する全概念の由来と根拠を検査する。
+// CUEスキーマを独自定義したspecでも、根拠のない概念を通さないための横断検査。
+const glossaryResult = spawnSync("cue", ["export", ".", "-e", "glossary"], {
+  cwd: resolved,
+  encoding: "utf-8",
+});
+if (glossaryResult.status !== 0) {
+  errors.push("CUEのglossaryを読み出せませんでした");
+} else {
+  const glossary = JSON.parse(glossaryResult.stdout) as Glossary;
+  errors.push(...validateGlossaryProvenance(glossary));
+
+  const glossaryIds = new Set(Object.values(glossary).map((entry) => entry.id));
+  for (const id of knownIds) {
+    if (!glossaryIds.has(id)) {
+      errors.push(`既知の概念 ${JSON.stringify(id)} がglossaryにありません`);
+    }
+  }
+  for (const id of glossaryIds) {
+    if (!knownIds.has(id)) {
+      errors.push(`glossaryの概念 ${JSON.stringify(id)} がknownIdsにありません`);
+    }
+  }
+}
 
 // 1. constants.qnt から 識別子 → id の対応を読む
 const constantsPath = join(resolved, "constants.qnt");

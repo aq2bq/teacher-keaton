@@ -8,6 +8,7 @@ events: {
 		id:            "event-add"
 		preferredName: "タスクを追加"
 		definition:    "新しいタスクを未着手状態で追加する。"
+		origin:        "observed"
 		sources: [{location: "src/task.ts:27", note: "addTask"}]
 	}
 
@@ -15,6 +16,7 @@ events: {
 		id:            "event-start"
 		preferredName: "タスクを開始"
 		definition:    "タスクを未着手から作業中へ移す。"
+		origin:        "observed"
 		sources: [{location: "src/task.ts:54", note: "startTask"}]
 	}
 
@@ -22,6 +24,7 @@ events: {
 		id:            "event-done"
 		preferredName: "タスクを完了"
 		definition:    "タスクを作業中から完了済みへ移し、完了時刻を記録する。"
+		origin:        "observed"
 		sources: [{location: "src/task.ts:61", note: "completeTask"}]
 	}
 
@@ -29,6 +32,7 @@ events: {
 		id:            "event-reopen"
 		preferredName: "タスクを再開"
 		definition:    "タスクを完了済みから作業中へ戻す。"
+		origin:        "observed"
 		sources: [{location: "src/task.ts:71", note: "reopenTask"}]
 	}
 
@@ -36,6 +40,8 @@ events: {
 		id:            "event-reject-start-busy"
 		preferredName: "重複開始を拒否"
 		definition:    "作業中のタスクを再び開始しようとした試みの拒否。ドメイン状態は変えず、観測ログにだけ記録される。"
+		origin:        "inferred"
+		inferenceReason: "startTaskのガードで状態が変わらない試みを、投影可能なイベントとして区別するため。"
 		sources: [{location: "src/task.ts:54", note: "startTask は backlog からの遷移だけを許す"}]
 	}
 }

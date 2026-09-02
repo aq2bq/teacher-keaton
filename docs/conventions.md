@@ -193,10 +193,16 @@ measures: {
   `event-`(イベント)。状態は状態名そのもの(`backlog`)を id にしてよい。
 - 表示名(`preferredName`)と identity(id)を分離する。図・会話では表示名を、
   データでは id を使う。
-- 観測事実の根拠は任意の `sources: [{location, note?}]` に残す。`location` は
-  自由形式の位置表記(`"src/task.ts:1"` / `"出荷規則.md §3.2"` /
-  `"在庫.xlsx 'ロット状態'シート"`)。コード以外の文書を事実源にする場合も
-  行番号に縛られない。宣言すると用語表に根拠カラムが出て監査できる。
+- 用語表へ投影する全概念に `origin`(由来)と1件以上の
+  `sources: [{location, note?}]`(観測位置)を持たせる。
+  原資料に直接ある概念は `origin: "observed"` とする。
+  観測事実からモデル化のために追加した概念は `origin: "inferred"` とし、
+  空でない `inferenceReason`(追加理由)も持たせる。
+  推論は根拠の代わりではないため、`inferred` でも `sources` を省略しない。
+- `location` は自由形式の位置表記(`"src/task.ts:1"` / `"出荷規則.md §3.2"` /
+  `"在庫.xlsx 'ロット状態'シート"`)とする。
+  コード以外の文書を事実源にする場合も行番号に縛られない。
+  用語表は `observed` を原資料、`inferred` を推論理由と観測位置に分けて表示する。
 
 ## vocabulary.cue の構造
 
@@ -208,10 +214,14 @@ vocabulary: {
   }
 }
 
-// 用語→{id,種別,定義}。用語表の元データ。definitionを集約する。
+// 用語→{id,種別,定義,由来,観測位置,必要なら推論理由}。用語表の元データ。
 glossary: {
   for _, x in <concepts> {
-    (x.preferredName): { id: x.id, kind: "<kind>", definition: x.definition }
+    (x.preferredName): {
+      id: x.id, kind: "<kind>", definition: x.definition
+      origin: x.origin, sources: x.sources
+      if x.origin == "inferred" {inferenceReason: x.inferenceReason}
+    }
   }
 }
 
@@ -229,6 +239,8 @@ relations: [ ... ]
 
 `vocabulary` と `glossary` は概念データから**自動生成**する(二重管理しない)。
 同じ表示名が複数のidを持つと unification が衝突し、一意性が構造的に強制される。
+`knownIds` の全概念を `glossary` に含める。
+`check-consistency` はこの対応と、全用語の由来と根拠が揃っていることを検査する。
 
 `quintExpected` は「どの概念を振る舞いとして形式化するつもりか」の正本。
 原則は**健全だが完全ではない** — 全概念の形式化は目指さず、行動の核だけ挙げる。

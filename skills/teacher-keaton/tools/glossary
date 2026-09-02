@@ -6,9 +6,18 @@
 //   tools/glossary [<specパス>]    (既定: keaton/spec)
 
 import { cueExport, resolveSpecPath } from "./lib/quint";
-import { renderGlossary, type Glossary } from "./lib/glossary";
+import {
+  renderGlossary,
+  validateGlossaryProvenance,
+  type Glossary,
+} from "./lib/glossary";
 
 const specPath = resolveSpecPath(Bun.argv[2]);
 
 const glossary = await cueExport<Glossary>(specPath, "glossary");
+const provenanceErrors = validateGlossaryProvenance(glossary);
+if (provenanceErrors.length > 0) {
+  for (const error of provenanceErrors) console.error(`error: ${error}`);
+  process.exit(1);
+}
 process.stdout.write(renderGlossary(glossary));

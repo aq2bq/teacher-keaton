@@ -34,7 +34,11 @@ import {
 } from "./lib/artifacts";
 import { detectEvents, makeProjectionContext, projectionVocabRefs, type ProjectionSpec, type Trace } from "./lib/projection";
 import { makeLabelResolver, render } from "./lib/render";
-import { renderGlossary, type Glossary } from "./lib/glossary";
+import {
+  renderGlossary,
+  validateGlossaryProvenance,
+  type Glossary,
+} from "./lib/glossary";
 import { renderMeasures, type Measures } from "./lib/measures";
 import { generate as generateConceptMap, type Input as ConceptMapInput } from "./diagram-gen-bun/index";
 import { basename, dirname, resolve, join } from "node:path";
@@ -168,6 +172,11 @@ if (appName === "keaton") {
 
 // CUEから各ビューの元データを読む。
 const glossary = await cueExport<Glossary>(resolvedSpecPath, "glossary");
+const provenanceErrors = validateGlossaryProvenance(glossary);
+if (provenanceErrors.length > 0) {
+  for (const error of provenanceErrors) console.error(`error: ${error}`);
+  process.exit(1);
+}
 const relations = await cueExport<ConceptMapInput["relations"]>(resolvedSpecPath, "relations");
 const vocabulary = await cueExport<ConceptMapInput["vocabulary"]>(resolvedSpecPath, "vocabulary");
 const projection = await cueExport<ProjectionSpec>(resolvedSpecPath, "projection");

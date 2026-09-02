@@ -20,6 +20,8 @@ measures: {
 		id:            "measure-<measureKey>"
 		preferredName: "<表示名>"
 		definition:    "<何を測っているか。名前ではなく実際に測っている量を書く>"
+		origin:        "observed"
+		sources: [{location: "<ファイル:行>", note: "<測度の名称または定義の観測位置>"}]
 		unit?:         "<単位>"
 		range: {min: 0, max: 100}
 
@@ -36,6 +38,7 @@ measures: {
 			#Threshold & {
 				id:            "threshold-<measureKey>-<name>"
 				preferredName: "<閾値の表示名>"
+				origin:        "observed"
 				at:            3
 				// 閾値の値そのものを悪い側に含めるか(既定 true)。
 				// 「3以上は要対応」は既定、「80未満は不合格」は inclusive: false。

@@ -69,8 +69,11 @@ specに `about: {title, purpose, scope, exclusions, operationalUndecided}` が�
 
 ## glossary — 用語表
 
-CUEの `glossary`(用語→{id,種別,定義,任意で根拠})をMarkdown表で出す。
-概念に `sources` が宣言されていれば根拠カラムが出る。
+CUEの `glossary`(用語→{id,種別,定義,由来,観測位置,必要なら推論理由})を
+Markdown表で出す。
+原資料に直接ある概念は原資料の位置を表示する。
+モデル上で追加した概念は、追加理由と導出の基になった観測位置を分けて表示する。
+由来または観測位置がなく、あるいはモデル上で追加した概念に追加理由がない場合は失敗する。
 
 ```sh
 bun tools/glossary <spec>
@@ -160,14 +163,17 @@ bun tools/check-consistency <spec>
 ```
 
 検査項目:
-1. `.qnt` 内の文字列リテラルがCUEの `knownIds` に存在するか(未知idは失敗)
-2. `.qnt` 内に日本語/生リテラルが無いか(用語の原本はCUE)
-3. `constants.qnt` がCUEの `knownIds` と一致するか(鮮度)
-4. `projection.cue` の `when` が参照するQuint変数が宣言済みか
+1. `knownIds` の全概念が `glossary` にあり、`glossary` に未知idがないか
+2. `glossary` の全概念に由来と1件以上の観測位置があり、モデル上で追加した概念に
+   空でない追加理由があるか
+3. `.qnt` 内の文字列リテラルがCUEの `knownIds` に存在するか(未知idは失敗)
+4. `.qnt` 内に日本語または生リテラルが無いか(用語の原本はCUE)
+5. `constants.qnt` がCUEの `knownIds` と一致するか(鮮度)
+6. `projection.cue` の `when` が参照するQuint変数が宣言済みか
    (変数名を間違えると「何も出ない図」になるため)
-5. `projection.cue` の `event`/`from`/`to` がCUEの既知idか
+7. `projection.cue` の `event`/`from`/`to` がCUEの既知idか
    (図に出る語の原本は語彙。イベントも概念として宣言する)
-6. 測度(`measures` がある場合):
+8. 測度(`measures` がある場合):
    - 測度・閾値のidがCUEの既知idか、`entersState` が既知idか
    - `quintVar` がQuintで宣言済みか
    - 閾値を**生の比較**(`v >= 3` / `v <= <閾値>At`)で書いていないか
@@ -175,7 +181,7 @@ bun tools/check-consistency <spec>
    - 投影の測度述語が参照する測度・閾値が存在し、極性から向きを決められるか
    - 警告: 極性が `unresolved`(`TODO.md` へ回すべき状態)、範囲が空、
      閾値を持つのに極性が `neutral`
-7. 警告: `vocabulary.cue` の `quintExpected` に挙がっているがQuintで未使用の
+9. 警告: `vocabulary.cue` の `quintExpected` に挙がっているがQuintで未使用の
    概念(モデルの穴)。リストに無い概念は構造・投影専用とみなし警告しない
    (`quintExpected` の未知idは失敗)。使用判定は次の対応を使い、importしただけでは
    使用済みにしない:

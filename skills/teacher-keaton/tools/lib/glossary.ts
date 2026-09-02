@@ -1,5 +1,5 @@
 // グロッサリー(用語表)をMarkdownの表へレンダリングする。
-// 元データはCUEの glossary(用語→{id,種別,定義,任意で根拠})。
+// 元データはCUEの glossary(用語→{id,種別,定義,由来,根拠})。
 
 // 観測事実の根拠位置。location は自由形式の位置表記
 // ("src/task.ts:1" / "出荷規則.md §3.2" / "在庫.xlsx 'ロット状態'シート")。
@@ -9,11 +9,18 @@ export type Source = {
   note?: string;
 };
 
-export type GlossaryEntry = {
+export type ConceptOrigin = "observed" | "inferred";
+
+export type ConceptProvenance = {
+  origin: ConceptOrigin;
+  sources: Source[];
+  inferenceReason?: string;
+};
+
+export type GlossaryEntry = ConceptProvenance & {
   id: string;
   kind: string;
   definition: string;
-  sources?: Source[];
 };
 
 export type Glossary = Record<string, GlossaryEntry>;
@@ -23,10 +30,7 @@ function sanitizeCell(text: string): string {
   return text.replace(/\|/g, "\\|").replace(/\s+/g, " ").trim();
 }
 
-function renderSources(sources: Source[] | undefined): string {
-  if (sources === undefined || sources.length === 0) {
-    return "";
-  }
+function renderSources(sources: Source[]): string {
   return sources
     .map((source) =>
       source.note === undefined
@@ -34,6 +38,42 @@ function renderSources(sources: Source[] | undefined): string {
         : `${source.location} (${source.note})`,
     )
     .join(" / ");
+}
+
+function renderProvenance(entry: GlossaryEntry): string {
+  const sources = renderSources(entry.sources);
+  if (entry.origin === "inferred") {
+    return `推論: ${entry.inferenceReason} / 観測位置: ${sources}`;
+  }
+  return `原資料: ${sources}`;
+}
+
+// CUEスキーマを独自定義したspecでも、根拠のない概念を投影させない。
+export function validateGlossaryProvenance(glossary: Glossary): string[] {
+  const errors: string[] = [];
+  for (const [term, entry] of Object.entries(glossary)) {
+    const subject = `用語 ${JSON.stringify(term)} (id: ${JSON.stringify(entry.id)})`;
+    if (entry.origin !== "observed" && entry.origin !== "inferred") {
+      errors.push(`${subject} の origin は observed または inferred でなければなりません`);
+    }
+    if (!Array.isArray(entry.sources) || entry.sources.length === 0) {
+      errors.push(`${subject} に観測位置 sources が1件以上必要です`);
+    } else {
+      entry.sources.forEach((source, index) => {
+        if (typeof source.location !== "string" || source.location.trim().length === 0) {
+          errors.push(`${subject} の sources[${index}].location は空にできません`);
+        }
+      });
+    }
+    if (entry.origin === "inferred") {
+      if (typeof entry.inferenceReason !== "string" || entry.inferenceReason.trim().length === 0) {
+        errors.push(`${subject} は inferred なので inferenceReason が必要です`);
+      }
+    } else if (entry.inferenceReason !== undefined) {
+      errors.push(`${subject} は observed なので inferenceReason を持てません`);
+    }
+  }
+  return errors;
 }
 
 export function renderGlossary(glossary: Glossary): string {
@@ -53,16 +93,10 @@ export function renderGlossary(glossary: Glossary): string {
     return 0;
   });
 
-  // 根拠を持つ概念が一つでもあれば根拠カラムを出す(無ければ表を細く保つ)。
-  const hasSources = entries.some(
-    ([, entry]) => entry.sources !== undefined && entry.sources.length > 0,
-  );
-  const lines = hasSources
-    ? ["| 用語 | 種別 | 定義 | 根拠 |", "|---|---|---|---|"]
-    : ["| 用語 | 種別 | 定義 |", "|---|---|---|"];
+  const lines = ["| 用語 | 種別 | 定義 | 根拠 |", "|---|---|---|---|"];
   for (const [term, entry] of entries) {
     const base = `| ${sanitizeCell(term)} | ${sanitizeCell(entry.kind)} | ${sanitizeCell(entry.definition)}`;
-    lines.push(hasSources ? `${base} | ${sanitizeCell(renderSources(entry.sources))} |` : `${base} |`);
+    lines.push(`${base} | ${sanitizeCell(renderProvenance(entry))} |`);
   }
   return lines.join("\n") + "\n";
 }
