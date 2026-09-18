@@ -9,6 +9,11 @@ teacher-keaton は長期β版です。セマンティック・リバースエン
 
 ## [0.1.0] - 未リリース
 
+### Changed
+
+- 成果物ルートを `keaton_YYYYMMDDHHmmss/` に変更。初回出力時のローカル時刻を
+  作業単位で固定し、specパス省略時はspecを持つ最新ルートを参照する。
+
 ### Added
 
 - 初期骨格: リポジトリ構造、README、MIT LICENSE

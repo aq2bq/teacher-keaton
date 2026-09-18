@@ -1,3 +1,4 @@
+import { isArtifactRootName } from "./artifacts";
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 import {
@@ -47,9 +48,9 @@ export function moduleNameFor(specPath: string): string {
   const base = segments.pop() ?? "spec";
   // spec ディレクトリの直親をアプリ名とみなす。
   let appDir = base === "spec" ? segments[segments.length - 1] : base;
-  // 既定の <project>/keaton/spec のように直親が keaton なら、
+  // 直親が時刻付き成果物ルート（または従来の keaton）なら、
   // その一つ上(プロジェクト名)を使う。
-  if (appDir === "keaton") {
+  if (appDir === "keaton" || isArtifactRootName(appDir ?? "")) {
     appDir = segments[segments.length - 2] ?? appDir;
   }
   return `${toIdentifier(appDir ?? "spec")}Constants`;

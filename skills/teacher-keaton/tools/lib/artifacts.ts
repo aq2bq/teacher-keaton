@@ -1,31 +1,35 @@
-// スキルが作成または保持する成果物の配置規則。
-// CLIや形式検証処理は、保存先を独自に組み立てずこのモジュールから受け取る。
-
-import { existsSync, realpathSync } from "node:fs";
+// スキルの成果物は、初回出力のローカル時刻を付けたルートにまとめる。
+import { existsSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, join, relative, resolve, sep } from "node:path";
 
-// Ruby の spec/(RSpec)など各言語の慣習と衝突しないよう、専用の名前空間を使う。
-export const DEFAULT_ARTIFACT_ROOT = "keaton";
+export function isArtifactRootName(name: string): boolean {
+  return /^keaton_[0-9]{14}$/.test(name);
+}
+
+export function artifactRootName(now = new Date()): string {
+  const parts = [now.getFullYear(), now.getMonth() + 1, now.getDate(),
+    now.getHours(), now.getMinutes(), now.getSeconds()];
+  return `keaton_${parts.map((part, index) => String(part).padStart(index === 0 ? 4 : 2, "0")).join("")}`;
+}
+
+// コマンドをまたいでも同じ成果物を参照できるよう、specを持つ最新ルートを選ぶ。
+export function defaultArtifactRoot(cwd = process.cwd()): string {
+  return readdirSync(cwd, { withFileTypes: true })
+    .filter(entry => entry.isDirectory() && isArtifactRootName(entry.name)
+      && existsSync(join(cwd, entry.name, "spec")))
+    .map(entry => entry.name).sort().at(-1) ?? artifactRootName();
+}
+
+export const DEFAULT_ARTIFACT_ROOT = defaultArtifactRoot();
 export const DEFAULT_SPEC_PATH = `${DEFAULT_ARTIFACT_ROOT}/spec`;
 export const DEFAULT_EXPLANATION_PATH = `${DEFAULT_ARTIFACT_ROOT}/explanation.md`;
 
-// 実行場所の keaton/spec を使う通常経路なら、実行場所の成果物ルートを返す。
-// 開発者が明示した既存specは、スキルの新規出力先と区別する。
 export function artifactRootForSpec(specPath: string): string | undefined {
-  const resolvedSpec = resolve(specPath);
-  const defaultSpec = resolve(DEFAULT_SPEC_PATH);
-  if (resolvedSpec === defaultSpec) {
-    return resolve(DEFAULT_ARTIFACT_ROOT);
-  }
-  if (
-    existsSync(resolvedSpec) &&
-    existsSync(defaultSpec) &&
-    realpathSync(resolvedSpec) === realpathSync(defaultSpec)
-  ) {
-    return resolve(DEFAULT_ARTIFACT_ROOT);
-  }
-  return undefined;
+  const spec = resolve(specPath);
+  const root = dirname(spec);
+  return basename(spec) === "spec" && dirname(root) === resolve(".")
+    && isArtifactRootName(basename(root)) ? root : undefined;
 }
 
 export function explanationPathForSpec(specPath: string): string | undefined {
@@ -33,24 +37,17 @@ export function explanationPathForSpec(specPath: string): string | undefined {
   return root === undefined ? undefined : join(root, "explanation.md");
 }
 
-// explainで明示する保存先も、実行場所の keaton/ から外へ出さない。
-export function resolveArtifactOutputPath(outputPath: string): string {
-  const root = resolve(DEFAULT_ARTIFACT_ROOT);
+export function resolveArtifactOutputPath(outputPath: string, specPath?: string): string {
   const target = resolve(outputPath);
-  const pathFromRoot = relative(root, target);
-  if (
-    pathFromRoot === "" ||
-    pathFromRoot === ".." ||
-    pathFromRoot.startsWith(`..${sep}`) ||
-    isAbsolute(pathFromRoot)
-  ) {
-    throw new Error(`出力先は実行場所の ${DEFAULT_ARTIFACT_ROOT}/ 配下に指定してください: ${outputPath}`);
+  const parts = relative(resolve("."), target).split(sep);
+  const root = specPath === undefined ? undefined : artifactRootForSpec(specPath);
+  if (parts.length < 2 || !isArtifactRootName(parts[0])
+    || (root !== undefined && resolve(parts[0]) !== root)) {
+    throw new Error(`出力先は実行場所の成果物ルート keaton_YYYYMMDDHHmmss/ 配下（時刻付きspecの場合は同じルート）に指定してください: ${outputPath}`);
   }
   return target;
 }
 
-// 通常のスキル利用では一時ファイルも keaton/tmp に収める。
-// リポジトリ開発で既存specを明示した場合だけOSの一時ディレクトリを使う。
 export function temporaryRootForSpec(specPath: string): string {
   const root = artifactRootForSpec(specPath);
   return root === undefined ? tmpdir() : join(root, "tmp");

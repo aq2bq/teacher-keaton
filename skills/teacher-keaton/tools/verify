@@ -18,8 +18,8 @@
 // 浅い深度でも時間切れになるモデルは、対象が拡散している徴候であり、
 // スコープの絞り直しか抽象化の提案を利用者へ返す引き金にする。
 //
-// Apalacheの作業場(_apalache-out/)は、成果物の置き場所である keaton/ の中
-// (keaton/ が無いspecでは spec の中)に隔離する。
+// Apalacheの作業場(_apalache-out/)は、成果物の置き場所である keaton_YYYYMMDDHHmmss/ の中
+// (keaton_YYYYMMDDHHmmss/ が無いspecでは spec の中)に隔離する。
 // 全探索深度で反証がない場合は削除し、反証が見つかったときだけ保持して保存場所を報告する。
 //
 // 規約: 不変条件は頂層の `val <Name>: bool` として書く。
@@ -56,7 +56,7 @@ type Options = {
 
 function usage(): void {
   console.error("使い方: tools/verify [<specパス>] [--depths 4,8,12] [--timeout <秒>] [--max-steps <n>] [--verbose]");
-  console.error("specパス省略時は keaton/spec を使います。");
+  console.error("specパス省略時は spec を持つ最新の keaton_YYYYMMDDHHmmss/ を使います。");
   console.error("--depths: 段階探索の深度列(既定 4,8,12)。--timeout: 1段あたりの秒(既定 60)。");
   console.error("--max-steps: 段階探索をせず単一深度で検証する。");
   console.error("--verbose: verify.log へ保存する詳細出力を端末にも表示する。");
@@ -127,7 +127,7 @@ if (qntFiles.length === 0) {
 const INVARIANT_DECL = /^ {2}val (\w+)\s*:\s*bool\b/;
 
 // Apalacheの作業場。Apalacheは cwd に `_apalache-out/` を作るため、
-// cwd を「成果物の置き場所である keaton/」(keaton/ が無いspecでは spec 自体)
+// cwd を「成果物の置き場所である keaton_YYYYMMDDHHmmss/」(keaton_YYYYMMDDHHmmss/ が無いspecでは spec 自体)
 // にすれば、作業場は約束された領域の中に収まる。
 function workspaceFor(specPath: string): string {
   return artifactRootForSpec(specPath) ?? specPath;

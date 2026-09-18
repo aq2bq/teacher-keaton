@@ -17,7 +17,7 @@ function usage(): void {
     "使い方: tools/gen-mermaid-diagram [<specパス>] " +
       "[--focus <用語または概念id>] [--focus-depth <非負整数>]",
   );
-  console.error("specパス省略時は keaton/spec を使います。");
+  console.error("specパス省略時は spec を持つ最新の keaton_YYYYMMDDHHmmss/ を使います。");
   console.error("--focus-depth の既定は1です。--focus が無い場合は指定できません。");
 }
 

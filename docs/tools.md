@@ -1,7 +1,8 @@
 # ツールリファレンス
 
 `skills/teacher-keaton/tools/` にあるツールの一覧。すべて `<specパス>` を先頭引数に取る。
-**`<specパス>` を省略すると既定の `keaton/spec`** を使う。
+**`<specパス>` を省略すると、実行場所で `spec/` を持つ最新の `keaton_YYYYMMDDHHmmss/spec`** を使う。
+時刻は初回出力時のローカル時刻（年月日時分秒）で、同じ作業では固定する。
 既存モデルを明示すれば、そちらを入力として優先する。
 Bunで実行する: `bun <skill-dir>/tools/<tool> [<specパス>] [オプション]`。
 
@@ -24,7 +25,7 @@ bun tools/vet <spec>
 
 「正例N/N通過、負例N/N拒否」を報告し、期待と逆なら非ゼロ終了する。
 
-`keaton/spec` を使う通常経路では、検査用コピーを `keaton/tmp/` に作り、
+`keaton_YYYYMMDDHHmmss/spec` を使う通常経路では、検査用コピーを `keaton_YYYYMMDDHHmmss/tmp/` に作り、
 各用例の検査後に削除する。
 
 ## explain — 全部入り解説書
@@ -33,18 +34,18 @@ bun tools/vet <spec>
 学習(オンボーディング)と分析の両方に使う。
 
 ```sh
-bun tools/explain                              # keaton/explanation.mdへ保存
+bun tools/explain                              # keaton_YYYYMMDDHHmmss/explanation.mdへ保存
 bun tools/explain <spec>                       # 観測(ランダムトレース)
 bun tools/explain <spec> --test <テスト名>      # 宣言(固定シナリオ)
 bun tools/explain <spec> --all-tests           # 全シナリオを束ねる
-bun tools/explain <spec> --output keaton/explanation.md # 成果物ルートへ保存
+bun tools/explain <spec> --output keaton_YYYYMMDDHHmmss/explanation.md # 成果物ルートへ保存
 bun tools/explain <spec> --seed <値>           # 再現性固定
 bun tools/explain <spec> --max-steps <n>       # 探索ステップ数(既定12)
 bun tools/explain <spec> --focus <用語または概念id> [--focus-depth <n>]
 ```
 
-`keaton/spec` を使う場合、`--output` を省略しても `keaton/explanation.md` へ保存する。
-`--output` で明示できる保存先も、実行場所の `keaton/` 配下に限る。
+`keaton_YYYYMMDDHHmmss/spec` を使う場合、`--output` を省略しても `keaton_YYYYMMDDHHmmss/explanation.md` へ保存する。
+`--output` で明示できる保存先も、実行場所の `keaton_YYYYMMDDHHmmss/` 配下に限る。時刻付きspecを使う場合は、そのspecと同じ成果物ルートに保存する。
 `examples/` など開発用の明示specパスを使い、`--output` を省略した場合は標準出力へ出す。
 
 `--all-tests` は `.qnt` の `run <名前>Test` をすべて列挙し、テストごとの図を
@@ -135,7 +136,7 @@ bun tools/project <spec> --format <形式>        # 形式の指定
 
 `--format` 省略時は `projection.cue` の `format` を使う。
 
-`keaton/spec` を使ってトレースを生成する場合、一時ファイルは `keaton/tmp/` に作り、
+`keaton_YYYYMMDDHHmmss/spec` を使ってトレースを生成する場合、一時ファイルは `keaton_YYYYMMDDHHmmss/tmp/` に作り、
 投影後に削除する。
 
 ## gen-quint-constants — Quint定数の生成
@@ -207,8 +208,8 @@ bun tools/verify <spec> [--depths 4,8,12] [--timeout <秒>] [--max-steps <n>] [-
   到達した深度を必ず報告する。反証が出たら即停止。浅い深度でのタイムアウトは
   対象が拡散している徴候であり、スコープの絞り直しか抽象化の提案を利用者へ
   返す引き金にする
-- **作業場の隔離**: Apalacheの `_apalache-out/` は `keaton/` の中
-  (keaton/ が無いspecでは spec の中)に作られる。全探索深度で反証がない場合は削除し、
+- **作業場の隔離**: Apalacheの `_apalache-out/` は `keaton_YYYYMMDDHHmmss/` の中
+  (keaton_YYYYMMDDHHmmss/ が無いspecでは spec の中)に作られる。全探索深度で反証がない場合は削除し、
   反証が見つかったときだけ保持して保存場所を報告する
 - 報告: `形式モデルの不変条件 定義N件 / 指定N件 / 反証なしN件 (探索深度 N)`。
   これは結果に記載された探索深度まで不変条件を破る実行経路が見つからなかったという結果であり、
@@ -216,7 +217,7 @@ bun tools/verify <spec> [--depths 4,8,12] [--timeout <秒>] [--max-steps <n>] [-
 - **出力の分離**: 通常の端末表示は対象・深度・成否・到達深度の要約だけにする。
   Quint・Apalacheの逐次出力は成功・失敗を問わず `verify.log` へ保存し、
   最新実行で上書きする。`--verbose` を指定した場合だけ同じ詳細を端末にも表示する
-- 結果は `verify-result.json`(keaton/ の中、keaton/ が無いspecでは spec の中)
+- 結果は `verify-result.json`(keaton_YYYYMMDDHHmmss/ の中、keaton_YYYYMMDDHHmmss/ が無いspecでは spec の中)
   へ機械可読形式で書き出され、`explain` が「形式モデルの検証」節として取り込む。
   JSONの形式は実行結果に限定し、現場運用が検証対象外である旨は`explain`と本文書で示す
 - `--max-steps <n>` は段階探索をせず単一深度で検証する(従来互換)

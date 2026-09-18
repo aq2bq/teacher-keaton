@@ -63,11 +63,26 @@ macOS以外では、CUE・Quint・Bunを `PATH` から利用できるよう、�
 ## 成果物の保存先
 
 スキルは対象プロジェクトのルートで実行し、作成または保持するファイルを
-実行場所の `keaton/` に収める。
-**成果物ルート**とは、この `keaton/` を指す。
+実行場所の `keaton_YYYYMMDDHHmmss/` に収める。
+**成果物ルート**とは、この `keaton_YYYYMMDDHHmmss/` を指す。
+
+`YYYYMMDDHHmmss` は最初に成果物を出力する時点のローカル時刻（年月日時分秒、24時間制）です。
+エージェントは作業ごとに次のようにルートを一度だけ作り、以降のコマンドには
+同じ `"$artifact_root/spec"` を明示します。秒が変わっても同じ作業の保存先は変えません。
+同秒の既存ディレクトリと衝突した場合は、次の秒の時刻で作成し直します。
+
+```sh
+artifact_root="keaton_$(date +%Y%m%d%H%M%S)"
+mkdir "$artifact_root" && mkdir "$artifact_root/spec"  # 既存なら停止
+```
+
+以下の `keaton_YYYYMMDDHHmmss` は実際に作成した名前へ置き換えます。
+specパス省略時は、実行場所で `spec/` を持つ時刻付きルートのうち名前順で最新を参照します。
+対象がなければ当該コマンド開始時刻のパスを使い、spec未作成として失敗します。
+既存の `keaton/spec` を読む場合はパスを明示してください。
 
 ```
-keaton/
+keaton_YYYYMMDDHHmmss/
 ├── explanation.md       照合に使う解説書
 ├── TODO.md              未解決の食い違いがある場合だけ作る
 ├── verify-result.json   不変条件の検証結果
@@ -76,9 +91,9 @@ keaton/
 └── spec/                CUEとQuintの形式モデル
 ```
 
-スキルが一時ファイルや作業メモを直接作る場合も `keaton/tmp/` を使う。
+スキルが一時ファイルや作業メモを直接作る場合も `keaton_YYYYMMDDHHmmss/tmp/` を使う。
 `/tmp` や実行場所直下の `tmp/` に、スキルのファイルを作らない。
-明示specパスは既存モデルを検証する開発用途だけに使い、
+成果物ルート外の明示specパスは既存モデルを検証する開発用途だけに使い、
 対象プロジェクトへ新規作成する形式モデルの保存先には使わない。
 
 ツールはこのスキルの `tools/` ディレクトリにある。
@@ -89,13 +104,13 @@ bun <skill-dir>/tools/<tool> <specパス> [オプション]
 ```
 
 `<specパス>` は、一つのシステムのCUE(`*.cue`)とQuint(`*.qnt`)を含むディレクトリ。
-**既定は `keaton/spec`**(カレントディレクトリ基準)。Rubyの `spec/`(RSpec)など
-各言語の慣習と衝突しないよう、専用の `keaton/` 名前空間を使う。ツールは
-`<specパス>` を省略すると `keaton/spec` を使う。
+**既定は `keaton_YYYYMMDDHHmmss/spec`**(カレントディレクトリ基準)。Rubyの `spec/`(RSpec)など
+各言語の慣習と衝突しないよう、専用の `keaton_YYYYMMDDHHmmss/` 名前空間を使う。ツールは
+`<specパス>` を省略すると、実行場所で `spec/` を持つ最新の `keaton_YYYYMMDDHHmmss/` を使う。
 既存モデルを明示すれば、そちらを入力として優先する。
 
 ```sh
-bun <skill-dir>/tools/explain                    # 既定の keaton/spec を使う
+bun <skill-dir>/tools/explain                    # 既定の keaton_YYYYMMDDHHmmss/spec を使う
 bun <skill-dir>/tools/explain path/to/spec       # 明示的に指定
 ```
 
@@ -196,7 +211,7 @@ CUEのid/名を参照し、独自に作り出さない。
 
 ### 2. CUEで構造を書く
 
-対象プロジェクトの `keaton/spec/` ディレクトリを作る(既定の出力先)。定義するもの:
+対象プロジェクトの `keaton_YYYYMMDDHHmmss/spec/` ディレクトリを作る(既定の出力先)。定義するもの:
 - `schema.cue`: エンティティのスキーマ・enum・構造制約
   (必須フィールド・型・値の範囲)。コードが読込時に行う検証を写し取る。
   主要な境界条件ごとに、許可されるべき实例を `positives/`、拒否されるべき实例を
@@ -256,7 +271,7 @@ flippedCase: #MeasureVerdict & {
   `bun <skill-dir>/tools/gen-quint-constants <specパス>`。`constants.qnt` が書かれる。
   `<name>.qnt` では `import <Module>Constants.* from "./constants"` して
   その定数を使い、**生文字列は使わない**
-- モジュール名はspecの位置から決まる: 既定の `keaton/spec` ならプロジェクト名
+- モジュール名はspecの位置から決まる: 既定の `keaton_YYYYMMDDHHmmss/spec` ならプロジェクト名
   (`myapp` → `MyappConstants`)、それ以外はspecのディレクトリ名
   (`apps/todo-cli/spec` → `TodoCliConstants`)。生成後に `constants.qnt` の
   `module` 行を確認し、`import` と揃える
@@ -343,14 +358,14 @@ Quintの文字列リテラルが既知のCUE idか、`.qnt` に日本語/生リ�
 ```sh
 bun <skill-dir>/tools/explain <specパス>            # 全部入り解説書(Markdown)
 bun <skill-dir>/tools/explain <specパス> --test <テスト名>  # 特定シナリオ
-bun <skill-dir>/tools/explain <specパス> --all-tests --output keaton/explanation.md
+bun <skill-dir>/tools/explain <specパス> --all-tests --output keaton_YYYYMMDDHHmmss/explanation.md
     # 全シナリオの図を束ね、成果物ルートの解説書へ保存する
 bun <skill-dir>/tools/explain <specパス> --focus <用語または概念id> --focus-depth <n>
     # 概念マップだけを中心概念の近傍へ絞る
 ```
 
-`keaton/spec` を使う場合、`--output` を省略しても `keaton/explanation.md` へ保存する。
-保存先を明示する場合も実行場所の `keaton/` 配下に限る。
+`keaton_YYYYMMDDHHmmss/spec` を使う場合、`--output` を省略しても `keaton_YYYYMMDDHHmmss/explanation.md` へ保存する。
+保存先を明示する場合も実行場所の `keaton_YYYYMMDDHHmmss/` 配下に限る。時刻付きspecを使う場合は、そのspecと同じ成果物ルートに保存する。
 開発用の明示specパスを使い、`--output` を省略した場合は標準出力へ出す。
 全体の概念マップから問いに必要な関係を追いにくい場合は、`--focus` で中心概念を、
 `--focus-depth` で関係を何辺先まで含めるかを指定する。近傍深度の既定は1で、
@@ -437,7 +452,7 @@ bun <skill-dir>/tools/project             <specパス>   # 振る舞い図(シ�
 
 | 観測した状態 | 保存先 | 扱い |
 |---|---|---|
-| 追加調査後も観測事実が一つの語彙または論理構造へ収束しない | `keaton/TODO.md` | 依存するモデルとビューを保留し、人間へ判断を求める |
+| 追加調査後も観測事実が一つの語彙または論理構造へ収束しない | `keaton_YYYYMMDDHHmmss/TODO.md` | 依存するモデルとビューを保留し、人間へ判断を求める |
 | 原資料が運用上の選択をまだ決めていないが、観測事実同士は両立する | `about.operationalUndecided` | 未決定の選択を推測でモデル化せず、観測できる範囲は続行する |
 | 理解計画で調査または形式化しないと合意した | `about.exclusions` | 合意した対象範囲だけを続行する |
 
@@ -460,7 +475,7 @@ CUEとQuintが検査するのは、モデルへ入れた前提に対する整合
    この場合は `TODO.md` を作らない
 3. 追加調査後も、一つの語彙または論理構造に決まらない場合は推測で解消しない。
    これを**未解決の食い違い**と呼ぶ
-4. 未解決の食い違いを対象プロジェクトの `keaton/TODO.md` へ記録する
+4. 未解決の食い違いを対象プロジェクトの `keaton_YYYYMMDDHHmmss/TODO.md` へ記録する
 5. 未解決の食い違いに依存するモデルとビューを保留し、依存しない範囲だけを検証して出す。
    中心概念が未解決なら、それに依存する後続フェーズも止める
 
@@ -517,7 +532,7 @@ CUEとQuintが検査するのは、モデルへ入れた前提に対する整合
 | ツール | 役割 |
 |---|---|
 | `vet` | CUEの構造検証(`cue vet -c` をcwd非依存で包む) |
-| `explain` | 全部入り解説書: 用語表+概念マップ+振る舞い図を一つのMarkdownで(`keaton/spec` では `keaton/explanation.md` へ保存) |
+| `explain` | 全部入り解説書: 用語表+概念マップ+振る舞い図を一つのMarkdownで(`keaton_YYYYMMDDHHmmss/spec` では `keaton_YYYYMMDDHHmmss/explanation.md` へ保存) |
 | `glossary` | CUEの `glossary` から用語表(Markdown表) |
 | `measures` | CUEの `measures` から測度表(範囲・極性・閾値・超過時の意味・根拠) |
 | `gen-mermaid-diagram` | CUEの語彙と関係から概念マップ(Mermaid `graph LR`) |

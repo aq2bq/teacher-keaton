@@ -16,8 +16,8 @@
 //   - 状態遷移図   : projection.cue に transition イベントがあれば
 //
 // --all-tests は .qnt の `run <名前>Test` をすべて列挙し、シナリオごとの図を
-// 一つのMarkdownに束ねる。keaton/spec を使う通常経路では、
-// keaton/explanation.md へ保存する。
+// 一つのMarkdownに束ねる。keaton_YYYYMMDDHHmmss/spec を使う通常経路では、
+// keaton_YYYYMMDDHHmmss/explanation.md へ保存する。
 
 import {
   cleanupTrace,
@@ -29,6 +29,7 @@ import {
 } from "./lib/quint";
 import {
   artifactRootForSpec,
+  isArtifactRootName,
   explanationPathForSpec,
   resolveArtifactOutputPath,
 } from "./lib/artifacts";
@@ -61,9 +62,9 @@ function usage(): void {
       "[--test <テスト名> | --all-tests] [--seed <値>] [--max-steps <n>] " +
       "[--output <パス>] [--focus <用語または概念id>] [--focus-depth <非負整数>]",
   );
-  console.error("specパス省略時は keaton/spec を使います。");
-  console.error("keaton/spec の解説書は keaton/explanation.md へ保存します。");
-  console.error("--output の保存先は実行場所の keaton/ 配下に限ります。");
+  console.error("specパス省略時は spec を持つ最新の keaton_YYYYMMDDHHmmss/ を使います。");
+  console.error("keaton_YYYYMMDDHHmmss/spec の解説書は keaton_YYYYMMDDHHmmss/explanation.md へ保存します。");
+  console.error("--output の保存先は実行場所の keaton_YYYYMMDDHHmmss/ 配下に限ります。");
   console.error("--focus-depth の既定は1です。--focus が無い場合は指定できません。");
 }
 
@@ -158,15 +159,15 @@ let resolvedOutputPath: string | undefined;
 try {
   resolvedOutputPath = options.output === undefined
     ? explanationPathForSpec(resolvedSpecPath)
-    : resolveArtifactOutputPath(options.output);
+    : resolveArtifactOutputPath(options.output, resolvedSpecPath);
 } catch (error) {
   console.error(`error: ${(error as Error).message}`);
   process.exit(1);
 }
-// 解説書の題名はプロジェクト名から取る。既定の <project>/keaton/spec のように
-// 直上が keaton なら、その一つ上をプロジェクト名とする。
+// 解説書の題名はプロジェクト名から取る。既定の <project>/keaton_YYYYMMDDHHmmss/spec のように
+// 直上が時刻付き成果物ルートなら、その一つ上をプロジェクト名とする。
 let appName = basename(dirname(resolvedSpecPath));
-if (appName === "keaton") {
+if (appName === "keaton" || isArtifactRootName(appName)) {
   appName = basename(dirname(dirname(resolvedSpecPath)));
 }
 

@@ -33,7 +33,7 @@ AIエージェントのスキルです。目的はコード生成ではなく、
 
 検証や照合で、実コードだけでは一つの語彙または論理構造へ収束しない食い違いを
 見つけた場合は、推測で形式モデルを通しません。
-根拠を `keaton/TODO.md` に残し、保留した範囲と必要な判断をユーザーへ報告します。
+根拠を `keaton_YYYYMMDDHHmmss/TODO.md` に残し、保留した範囲と必要な判断をユーザーへ報告します。
 原資料が運用をまだ決めていないだけで観測事実が両立する事項は
 `about.operationalUndecided`、理解計画で扱わない事項は `about.exclusions` に分け、
 `TODO.md`へ混ぜません。
@@ -42,10 +42,11 @@ AIエージェントのスキルです。目的はコード生成ではなく、
 原資料に直接ある概念と、観測事実を表現するためモデル上で追加した概念を区別し、
 後者には追加理由も残すため、利用者は原資料とモデル作成者の導出を別々に監査できます。
 
-スキルが作成または保持するファイルは、実行場所の `keaton/` に収めます。
-形式モデルは `keaton/spec/`、照合用の解説書は `keaton/explanation.md`、
-検証の詳細は `keaton/verify.log`、処理中だけ使うトレースと検査用コピーは
-`keaton/tmp/` に置きます。
+スキルが作成または保持するファイルは、実行場所の `keaton_YYYYMMDDHHmmss/` に収めます。
+形式モデルは `keaton_YYYYMMDDHHmmss/spec/`、照合用の解説書は `keaton_YYYYMMDDHHmmss/explanation.md`、
+検証の詳細は `keaton_YYYYMMDDHHmmss/verify.log`、処理中だけ使うトレースと検査用コピーは
+`keaton_YYYYMMDDHHmmss/tmp/` に置きます。
+サフィックスは初回出力時のローカル時刻（年月日時分秒）で、同じ作業では固定します。
 
 大きな概念マップは、`explain --focus <用語または概念id> --focus-depth <n>` で
 中心概念から指定した辺数以内へ絞れます。オプション省略時は全体図を出します。

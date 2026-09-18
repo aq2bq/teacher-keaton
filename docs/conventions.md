@@ -1,19 +1,34 @@
 # 規約: specの構造と書き方
 
-形式モデルは対象プロジェクトの **`keaton/spec/`** に置く(既定の出力先)。
-Rubyの `spec/`(RSpec)など各言語の慣習と衝突しないよう、専用の `keaton/`
-名前空間を使う。ツールは `<specパス>` を省略すると `keaton/spec` を使う。
+形式モデルは対象プロジェクトの **`keaton_YYYYMMDDHHmmss/spec/`** に置く(既定の出力先)。
+Rubyの `spec/`(RSpec)など各言語の慣習と衝突しないよう、専用の `keaton_YYYYMMDDHHmmss/`
+名前空間を使う。ツールは `<specパス>` を省略すると、実行場所で `spec/` を持つ最新の `keaton_YYYYMMDDHHmmss/` を使う。
 `examples/` に実例、`templates/` に雛形がある。
 
 対象プロジェクトのルートでスキルを実行し、作成または保持するファイルは
-実行場所の `keaton/` に収める。
-**成果物ルート**とは、この `keaton/` を指す。
+実行場所の `keaton_YYYYMMDDHHmmss/` に収める。
+**成果物ルート**とは、この `keaton_YYYYMMDDHHmmss/` を指す。
 
-## keaton/ の構成
+`YYYYMMDDHHmmss` は最初に成果物を出力する時点のローカル時刻（年月日時分秒、24時間制）です。
+エージェントは作業ごとに次のようにルートを一度だけ作り、以降のコマンドには
+同じ `"$artifact_root/spec"` を明示します。秒が変わっても同じ作業の保存先は変えません。
+同秒の既存ディレクトリと衝突した場合は、次の秒の時刻で作成し直します。
+
+```sh
+artifact_root="keaton_$(date +%Y%m%d%H%M%S)"
+mkdir "$artifact_root" && mkdir "$artifact_root/spec"  # 既存なら停止
+```
+
+以下の `keaton_YYYYMMDDHHmmss` は実際に作成した名前へ置き換えます。
+specパス省略時は、実行場所で `spec/` を持つ時刻付きルートのうち名前順で最新を参照します。
+対象がなければ当該コマンド開始時刻のパスを使い、spec未作成として失敗します。
+既存の `keaton/spec` を読む場合はパスを明示してください。
+
+## keaton_YYYYMMDDHHmmss/ の構成
 
 ```
 <プロジェクト>/
-└── keaton/
+└── keaton_YYYYMMDDHHmmss/
     ├── explanation.md        explain が書き出す照合用の解説書
     ├── TODO.md               未解決の食い違いがある場合だけ作る根拠付き記録
     ├── verify-result.json    tools/verify が書き出す検証結果(任意。explainが取り込む)
@@ -32,10 +47,10 @@ Rubyの `spec/`(RSpec)など各言語の慣習と衝突しないよう、専用�
         └── negatives/        拒否されるべき实例(境界条件ごとに最低1件)
 ```
 
-`keaton/` をルートにするのは、将来spec以外の成果物を置く余地を残すため。
-`TODO.md` のパスは `<プロジェクト>/keaton/TODO.md` とする。
-`explanation.md` のパスは `<プロジェクト>/keaton/explanation.md` とする。
-スキルが一時ファイルや作業メモを直接作る場合も `keaton/tmp/` を使い、
+`keaton_YYYYMMDDHHmmss/` をルートにするのは、将来spec以外の成果物を置く余地を残すため。
+`TODO.md` のパスは `<プロジェクト>/keaton_YYYYMMDDHHmmss/TODO.md` とする。
+`explanation.md` のパスは `<プロジェクト>/keaton_YYYYMMDDHHmmss/explanation.md` とする。
+スキルが一時ファイルや作業メモを直接作る場合も `keaton_YYYYMMDDHHmmss/tmp/` を使い、
 `/tmp` や実行場所直下の `tmp/` には作らない。
 明示した `<specパス>` は、`examples/` など既存モデルを検証する開発用途に限る。
 
@@ -48,16 +63,16 @@ Rubyの `spec/`(RSpec)など各言語の慣習と衝突しないよう、専用�
 題名になる。`operationalUndecided` は、原資料が担当者・手順・時期・教育・記録方法などを
 まだ決めていないが、観測事実同士は両立している事項を文字列配列で記録する。
 1件以上あれば `explain` が `## 運用未確定` 節として出力する。
-`tools/verify` の結果は `keaton/verify-result.json` へ書き出され、
+`tools/verify` の結果は `keaton_YYYYMMDDHHmmss/verify-result.json` へ書き出され、
 `explain` が `## 形式モデルの検証` 節として取り込む。同節には、結果に記載された探索深度までの
 不変条件検査であり、教育・記録・遵守を含む現場運用の実効性は検証していないことを示す。
-`keaton/spec` を使う `explain` は、解説書を `keaton/explanation.md` へ保存する。
+`keaton_YYYYMMDDHHmmss/spec` を使う `explain` は、解説書を `keaton_YYYYMMDDHHmmss/explanation.md` へ保存する。
 
 ## 未確定事項と対象外の保存先
 
 | 観測した状態 | 保存先 | モデルとビュー |
 |---|---|---|
-| 追加調査後も観測事実が一つの語彙または論理構造へ収束しない | `keaton/TODO.md` | 依存する範囲を保留する |
+| 追加調査後も観測事実が一つの語彙または論理構造へ収束しない | `keaton_YYYYMMDDHHmmss/TODO.md` | 依存する範囲を保留する |
 | 原資料が運用上の選択をまだ決めていないが、観測事実同士は両立する | `about.operationalUndecided` | 未決定の選択を推測で足さず、観測できる範囲は続行する |
 | 理解計画で調査または形式化しないと合意した | `about.exclusions` | 合意した対象範囲だけを続行する |
 
@@ -267,11 +282,11 @@ relations: [ ... ]
 
 | specの場所 | モジュール名 |
 |---|---|
-| `<project>/keaton/spec`(既定) | `<Project>Constants`(プロジェクト名。例: `MyappConstants`) |
+| `<project>/keaton_YYYYMMDDHHmmss/spec`(既定) | `<Project>Constants`(プロジェクト名。例: `MyappConstants`) |
 | `apps/momotaro/spec` | `MomotaroConstants`(アプリ名) |
 | `apps/todo-cli/spec` | `TodoCliConstants`(ハイフンはcamelCase化) |
 
-既定の `keaton/spec` では直親が `keaton` なので、その一つ上のプロジェクト名を使う。
+既定の `keaton_YYYYMMDDHHmmss/spec` では直親が `keaton_YYYYMMDDHHmmss` なので、その一つ上のプロジェクト名を使う。
 生成後に `constants.qnt` の `module` 行を確認し、`<name>.qnt` の `import` と揃えること。
 
 ## projection.cue の書き方(核心)

@@ -148,7 +148,7 @@ if (measures !== undefined) {
     }
     if (measure.polarity === "unresolved") {
       console.error(
-        `warning: 測度 ${measure.id} の極性が未確認です — keaton/TODO.md に根拠を残し、` +
+        `warning: 測度 ${measure.id} の極性が未確認です — keaton_YYYYMMDDHHmmss/TODO.md に根拠を残し、` +
           "依存するモデルとビューを保留してください",
       );
     }

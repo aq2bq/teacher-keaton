@@ -1,7 +1,7 @@
 # templates — 新規プロジェクト用 spec 雛形
 
 新しいシステムを形式化する際の `spec/` の出発点。このディレクトリのファイルを
-対象プロジェクトの **`keaton/spec/`** にコピーし、`<...>` のプレースホルダを埋めて使う。
+対象プロジェクトの **`keaton_YYYYMMDDHHmmss/spec/`** にコピーし、`<...>` のプレースホルダを埋めて使う。
 
 ```
 templates/
@@ -35,7 +35,7 @@ templates/
    bun <skill>/tools/gen-quint-constants <spec>
    quint typecheck <spec>/<name>.qnt
    bun <skill>/tools/check-consistency <spec>
-   bun <skill>/tools/explain <spec> --output keaton/explanation.md
+   bun <skill>/tools/explain <spec> --output keaton_YYYYMMDDHHmmss/explanation.md
    ```
 
 ## 2つの原型

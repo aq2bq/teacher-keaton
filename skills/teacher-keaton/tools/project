@@ -35,7 +35,7 @@ function usage(): void {
   console.error("  tools/project [<specパス>] [--format <形式>] [--seed <値>] [--max-steps <n>]");
   console.error("  tools/project [<specパス>] --test <テスト名>");
   console.error("  tools/project [<specパス>] --trace <itfファイル>");
-  console.error("specパス省略時は keaton/spec を使います。");
+  console.error("specパス省略時は spec を持つ最新の keaton_YYYYMMDDHHmmss/ を使います。");
   console.error("形式: sequenceDiagram | stateDiagram | json (省略時は仕様の format)");
 }
 

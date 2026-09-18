@@ -3,7 +3,7 @@
 // グロッサリー(用語表)を個別に出力するツール。
 // CUEの glossary(用語→{id,種別,定義})を読み、Markdownの表で出す。
 //
-//   tools/glossary [<specパス>]    (既定: keaton/spec)
+//   tools/glossary [<specパス>]    (既定: keaton_YYYYMMDDHHmmss/spec)
 
 import { cueExport, resolveSpecPath } from "./lib/quint";
 import {
